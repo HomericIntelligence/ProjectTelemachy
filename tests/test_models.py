@@ -22,7 +22,7 @@ teams:
     agents:
       - worker
     tasks:
-      - title: "Do the thing"
+      - subject: "Do the thing"
         description: "Do something useful"
         assign_to: worker
 teardown: on_completion
@@ -44,13 +44,13 @@ teams:
       - agent-a
       - agent-b
     tasks:
-      - title: "Step 1"
+      - subject: "Step 1"
         description: "First step"
         assign_to: agent-a
-      - title: "Step 2"
+      - subject: "Step 2"
         description: "Second step, depends on Step 1"
         assign_to: agent-b
-        depends_on:
+        blocked_by:
           - "Step 1"
 teardown: on_completion
 """
@@ -71,8 +71,8 @@ class TestWorkflowSpecParsing:
         raw = yaml.safe_load(TWO_TASK_DEP_YAML)
         spec = WorkflowSpec.model_validate(raw)
         team = spec.teams[0]
-        step2 = next(t for t in team.tasks if t.title == "Step 2")
-        assert step2.depends_on == ["Step 1"]
+        step2 = next(t for t in team.tasks if t.subject == "Step 2")
+        assert step2.blocked_by == ["Step 1"]
 
     def test_agent_defaults(self) -> None:
         raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
@@ -132,16 +132,16 @@ class TestDependencyCycleDetection:
                     "agents": ["a"],
                     "tasks": [
                         {
-                            "title": "Task A",
+                            "subject": "Task A",
                             "description": "...",
                             "assign_to": "a",
-                            "depends_on": ["Task B"],
+                            "blocked_by": ["Task B"],
                         },
                         {
-                            "title": "Task B",
+                            "subject": "Task B",
                             "description": "...",
                             "assign_to": "a",
-                            "depends_on": ["Task A"],
+                            "blocked_by": ["Task A"],
                         },
                     ],
                 }
@@ -157,10 +157,10 @@ class TestDependencyCycleDetection:
             agents=["a"],
             tasks=[
                 TaskSpec(
-                    title="Task 1",
+                    subject="Task 1",
                     description="desc",
                     assign_to="a",
-                    depends_on=["Nonexistent Task"],
+                    blocked_by=["Nonexistent Task"],
                 )
             ],
         )
@@ -170,10 +170,10 @@ class TestDependencyCycleDetection:
     def test_self_dependency_raises(self) -> None:
         with pytest.raises(Exception, match="itself"):
             TaskSpec(
-                title="Task X",
+                subject="Task X",
                 description="...",
                 assign_to="a",
-                depends_on=["Task X"],
+                blocked_by=["Task X"],
             )
             # The validator runs at model level; construct TeamSpec to trigger it
             TeamSpec(
@@ -181,10 +181,10 @@ class TestDependencyCycleDetection:
                 agents=["a"],
                 tasks=[
                     TaskSpec(
-                        title="Task X",
+                        subject="Task X",
                         description="...",
                         assign_to="a",
-                        depends_on=["Task X"],
+                        blocked_by=["Task X"],
                     )
                 ],
             )

@@ -23,7 +23,7 @@ def _make_spec(
 ) -> WorkflowSpec:
     agents = agents or [{"name": "worker", "runtime": "local"}]
     tasks = tasks or [
-        {"title": "Task 1", "description": "Do work", "assign_to": "worker"}
+        {"subject": "Task 1", "description": "Do work", "assign_to": "worker"}
     ]
     return WorkflowSpec.model_validate(
         {
@@ -53,7 +53,7 @@ def _make_mock_client() -> MagicMock:
     client.create_task = AsyncMock(return_value="task-id-001")
     client.update_task = AsyncMock()
     client.get_tasks = AsyncMock(
-        return_value=[{"title": "Task 1", "status": "completed"}]
+        return_value=[{"subject": "Task 1", "status": "completed"}]
     )
     return client
 
@@ -72,8 +72,8 @@ class TestProvisioning:
                 {"name": "agent-b", "runtime": "local"},
             ],
             tasks=[
-                {"title": "T1", "description": "...", "assign_to": "agent-a"},
-                {"title": "T2", "description": "...", "assign_to": "agent-b"},
+                {"subject": "T1", "description": "...", "assign_to": "agent-a"},
+                {"subject": "T2", "description": "...", "assign_to": "agent-b"},
             ],
         )
         client.create_agent = AsyncMock(side_effect=["id-a", "id-b"])
@@ -136,14 +136,14 @@ class TestTaskCreation:
         client = _make_mock_client()
         client.get_tasks = AsyncMock(
             return_value=[
-                {"title": "T1", "status": "completed"},
-                {"title": "T2", "status": "completed"},
+                {"subject": "T1", "status": "completed"},
+                {"subject": "T2", "status": "completed"},
             ]
         )
         spec = _make_spec(
             tasks=[
-                {"title": "T1", "description": "...", "assign_to": "worker"},
-                {"title": "T2", "description": "...", "assign_to": "worker"},
+                {"subject": "T1", "description": "...", "assign_to": "worker"},
+                {"subject": "T2", "description": "...", "assign_to": "worker"},
             ]
         )
         executor = WorkflowExecutor(client, poll_interval=0.01)
@@ -152,18 +152,18 @@ class TestTaskCreation:
 
     @pytest.mark.asyncio
     async def test_dependent_task_submitted_after_predecessor(self) -> None:
-        """Task with depends_on must not be submitted before its dependency completes."""
+        """Task with blocked_by must not be submitted before its dependency completes."""
         call_order: list[str] = []
 
-        async def fake_create_task(team_id: str, spec: TaskSpec) -> str:
-            call_order.append(spec.title)
+        async def fake_create_task(team_id: str, spec: TaskSpec, blocked_by_ids: list[str] | None = None) -> str:
+            call_order.append(spec.subject)
             return f"task-{len(call_order)}"
 
         # First call returns pending; second call returns completed
         get_tasks_responses = [
-            [{"title": "Step 1", "status": "pending"}],
-            [{"title": "Step 1", "status": "completed"}],
-            [{"title": "Step 1", "status": "completed"}, {"title": "Step 2", "status": "completed"}],
+            [{"subject": "Step 1", "status": "pending"}],
+            [{"subject": "Step 1", "status": "completed"}],
+            [{"subject": "Step 1", "status": "completed"}, {"subject": "Step 2", "status": "completed"}],
         ]
         call_count = {"n": 0}
 
@@ -178,12 +178,12 @@ class TestTaskCreation:
 
         spec = _make_spec(
             tasks=[
-                {"title": "Step 1", "description": "...", "assign_to": "worker"},
+                {"subject": "Step 1", "description": "...", "assign_to": "worker"},
                 {
-                    "title": "Step 2",
+                    "subject": "Step 2",
                     "description": "...",
                     "assign_to": "worker",
-                    "depends_on": ["Step 1"],
+                    "blocked_by": ["Step 1"],
                 },
             ]
         )
@@ -246,7 +246,7 @@ class TestTeardown:
     async def test_failed_state_when_task_fails(self) -> None:
         client = _make_mock_client()
         client.get_tasks = AsyncMock(
-            return_value=[{"title": "Task 1", "status": "failed"}]
+            return_value=[{"subject": "Task 1", "status": "failed"}]
         )
         spec = _make_spec(teardown="never")
 

@@ -14,7 +14,7 @@ from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, Workfl
 logger = logging.getLogger(__name__)
 
 # Terminal task statuses reported by ai-maestro
-_DONE_STATUSES = {"completed", "done", "failed", "error", "cancelled"}
+_DONE_STATUSES = {"completed", "backlog", "failed", "error", "cancelled"}
 
 
 class WorkflowExecutor:
@@ -120,31 +120,32 @@ class WorkflowExecutor:
         agent_ids: dict[str, str],
     ) -> None:
         """Submit tasks in dependency order, waiting for predecessors to finish."""
-        submitted: dict[str, str] = {}   # title → task_id
-        completed_titles: set[str] = set()
+        submitted: dict[str, str] = {}   # subject → task_id
+        completed_subjects: set[str] = set()
         pending = list(team_spec.tasks)
 
         while pending:
             ready = [
                 t for t in pending
-                if all(dep in completed_titles for dep in t.depends_on)
+                if all(dep in completed_subjects for dep in t.blocked_by)
             ]
             if not ready:
                 # Wait for some tasks to complete before continuing
                 await asyncio.sleep(self._poll_interval)
                 tasks_status = await self._client.get_tasks(team_id)
                 for task_status in tasks_status:
-                    title = str(task_status.get("title", ""))
+                    subject = str(task_status.get("subject", ""))
                     status = str(task_status.get("status", ""))
-                    if status in _DONE_STATUSES and title in submitted:
-                        completed_titles.add(title)
+                    if status == "completed" and subject in submitted:
+                        completed_subjects.add(subject)
                 continue
 
             for task_spec in ready:
-                task_id = await self._client.create_task(team_id, task_spec)
-                submitted[task_spec.title] = task_id
+                blocked_by_ids = [submitted[dep] for dep in task_spec.blocked_by if dep in submitted]
+                task_id = await self._client.create_task(team_id, task_spec, blocked_by_ids)
+                submitted[task_spec.subject] = task_id
                 logger.info(
-                    "Submitted task '%s' → id=%s", task_spec.title, task_id
+                    "Submitted task '%s' → id=%s", task_spec.subject, task_id
                 )
                 pending.remove(task_spec)
 
@@ -168,7 +169,7 @@ class WorkflowExecutor:
                         any_failed = True
                         logger.warning(
                             "Task '%s' in team '%s' failed",
-                            task.get("title"),
+                            task.get("subject"),
                             team_name,
                         )
 

@@ -64,33 +64,33 @@ class MaestroClient:
     async def _create_local_agent(self, spec: AgentSpec) -> str:
         payload: dict[str, object] = {
             "name": spec.name,
+            "label": spec.name,
             "program": spec.program,
-            "working_dir": spec.working_dir,
+            "workingDirectory": spec.working_dir,
+            "taskDescription": f"Telemachy-managed agent: {spec.name}",
         }
         if spec.model:
-            payload["model"] = spec.model
+            payload["programArgs"] = f"--model {spec.model}"
 
         response = await self._http.post("/api/agents", json=payload)
         self._raise_for_status(response)
         data = response.json()
-        return str(data["id"])
+        return str(data.get("agent", data)["id"])
 
     async def _create_docker_agent(self, spec: AgentSpec) -> str:
         payload: dict[str, object] = {
             "name": spec.name,
-            "program": spec.program,
-            "working_dir": spec.working_dir,
+            "hostId": "hermes",
             "image": spec.docker_image,
             "cpus": spec.cpus,
             "memory": spec.memory,
+            "workingDirectory": spec.working_dir,
         }
-        if spec.model:
-            payload["model"] = spec.model
 
         response = await self._http.post("/api/agents/docker/create", json=payload)
         self._raise_for_status(response)
         data = response.json()
-        return str(data["id"])
+        return str(data.get("agent", data)["id"])
 
     async def wake_agent(self, agent_id: str) -> None:
         """Wake a hibernated agent."""
@@ -111,56 +111,71 @@ class MaestroClient:
         """List all agents across all hosts (unified view)."""
         response = await self._http.get("/api/agents/unified")
         self._raise_for_status(response)
-        return response.json()  # type: ignore[return-value]
+        return [entry["agent"] for entry in response.json()["agents"]]  # type: ignore[return-value]
 
     # === Team endpoints ===
 
     async def create_team(self, name: str, agent_ids: list[str]) -> str:
-        """Create a team with the given agents. Returns the maestro team id."""
-        payload: dict[str, object] = {
-            "name": name,
-            "agent_ids": agent_ids,
-        }
-        response = await self._http.post("/api/teams", json=payload)
+        """Create a team, then set members. Returns the maestro team id."""
+        response = await self._http.post("/api/teams", json={"name": name})
         self._raise_for_status(response)
-        data = response.json()
-        return str(data["id"])
+        team_id = str(response.json()["team"]["id"])
+        if agent_ids:
+            r2 = await self._http.put(
+                f"/api/teams/{team_id}", json={"agentIds": agent_ids}
+            )
+            self._raise_for_status(r2)
+        return team_id
+
+    async def delete_team(self, team_id: str) -> None:
+        """Delete a team."""
+        response = await self._http.delete(f"/api/teams/{team_id}")
+        self._raise_for_status(response)
 
     # === Task endpoints ===
 
-    async def create_task(self, team_id: str, spec: TaskSpec) -> str:
-        """Create a task within a team. Returns the maestro task id."""
+    async def create_task(
+        self, team_id: str, spec: TaskSpec, blocked_by_ids: list[str] | None = None
+    ) -> str:
+        """Create a task within a team. Returns the maestro task id.
+
+        blocked_by_ids are resolved task IDs (not subject names).
+        """
         payload: dict[str, object] = {
-            "title": spec.title,
+            "subject": spec.subject,
             "description": spec.description,
-            "assigned_to": spec.assign_to,
         }
+        if spec.assign_to:
+            payload["assigneeAgentId"] = spec.assign_to  # executor resolves name→id before calling
+        if blocked_by_ids:
+            payload["blockedBy"] = blocked_by_ids
+
         response = await self._http.post(f"/api/teams/{team_id}/tasks", json=payload)
         self._raise_for_status(response)
-        data = response.json()
-        return str(data["id"])
+        return str(response.json()["task"]["id"])
 
     async def update_task(
         self,
         team_id: str,
         task_id: str,
         status: str | None = None,
-        assigned_to: str | None = None,
-    ) -> None:
+        assignee_agent_id: str | None = None,
+    ) -> dict[str, object]:
         """Update a task's status or assignment."""
         payload: dict[str, object] = {}
         if status is not None:
             payload["status"] = status
-        if assigned_to is not None:
-            payload["assigned_to"] = assigned_to
+        if assignee_agent_id is not None:
+            payload["assigneeAgentId"] = assignee_agent_id
 
         response = await self._http.put(
             f"/api/teams/{team_id}/tasks/{task_id}", json=payload
         )
         self._raise_for_status(response)
+        return response.json()  # type: ignore[return-value]
 
     async def get_tasks(self, team_id: str) -> list[dict[str, object]]:
         """List all tasks for a team."""
         response = await self._http.get(f"/api/teams/{team_id}/tasks")
         self._raise_for_status(response)
-        return response.json()  # type: ignore[return-value]
+        return response.json()["tasks"]  # type: ignore[return-value]

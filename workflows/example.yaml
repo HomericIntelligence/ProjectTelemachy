@@ -26,7 +26,7 @@ teams:
       - architect
       - implementer
     tasks:
-      - title: "Analyse repository structure"
+      - subject: "Analyse repository structure"
         description: >
           Explore the repository at /workspace/audit. Identify the main modules,
           their responsibilities, and any obvious architectural concerns (tight
@@ -34,23 +34,23 @@ teams:
           findings report to /workspace/audit/FINDINGS.md.
         assign_to: architect
 
-      - title: "Refactor highest-priority module"
+      - subject: "Refactor highest-priority module"
         description: >
           Read FINDINGS.md. Select the module with the highest refactoring
           priority. Apply the recommended improvements: introduce proper
           abstractions, add type hints, and document public APIs. Commit the
           changes with a clear message.
         assign_to: implementer
-        depends_on:
+        blocked_by:
           - "Analyse repository structure"
 
-      - title: "Write unit tests for refactored module"
+      - subject: "Write unit tests for refactored module"
         description: >
           Read FINDINGS.md to identify which module was refactored. Write a
           comprehensive pytest test suite covering the public API of that module.
           Aim for at least 80% branch coverage. Place tests under tests/.
         assign_to: implementer
-        depends_on:
+        blocked_by:
           - "Refactor highest-priority module"
 
 teardown: on_completion

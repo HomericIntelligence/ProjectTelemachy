@@ -31,10 +31,10 @@ class AgentSpec(BaseModel):
 class TaskSpec(BaseModel):
     """Specification for a single task within a team."""
 
-    title: str
+    subject: str
     description: str
     assign_to: str  # agent name
-    depends_on: list[str] = []
+    blocked_by: list[str] = []
 
 
 class TeamSpec(BaseModel):
@@ -48,43 +48,43 @@ class TeamSpec(BaseModel):
     @classmethod
     def no_self_dependency(cls, tasks: list[TaskSpec]) -> list[TaskSpec]:
         for task in tasks:
-            if task.title in task.depends_on:
+            if task.subject in task.blocked_by:
                 raise ValueError(
-                    f"Task '{task.title}' cannot depend on itself"
+                    f"Task '{task.subject}' cannot depend on itself"
                 )
         return tasks
 
     def detect_dependency_cycles(self) -> None:
         """Raise ValueError if task dependencies contain a cycle."""
-        task_titles = {t.title for t in self.tasks}
-        deps: dict[str, list[str]] = {t.title: t.depends_on for t in self.tasks}
+        task_subjects = {t.subject for t in self.tasks}
+        deps: dict[str, list[str]] = {t.subject: t.blocked_by for t in self.tasks}
 
-        # Validate all depends_on references exist
+        # Validate all blocked_by references exist
         for task in self.tasks:
-            for dep in task.depends_on:
-                if dep not in task_titles:
+            for dep in task.blocked_by:
+                if dep not in task_subjects:
                     raise ValueError(
-                        f"Task '{task.title}' depends on unknown task '{dep}'"
+                        f"Task '{task.subject}' depends on unknown task '{dep}'"
                     )
 
         # Topological sort (Kahn's algorithm) to detect cycles
-        in_degree: dict[str, int] = {t: 0 for t in task_titles}
-        for title, task_deps in deps.items():
+        in_degree: dict[str, int] = {t: 0 for t in task_subjects}
+        for subject, task_deps in deps.items():
             for dep in task_deps:
-                in_degree[title] += 1
+                in_degree[subject] += 1
 
         queue = [t for t, d in in_degree.items() if d == 0]
         visited = 0
         while queue:
             node = queue.pop(0)
             visited += 1
-            for title, task_deps in deps.items():
+            for subject, task_deps in deps.items():
                 if node in task_deps:
-                    in_degree[title] -= 1
-                    if in_degree[title] == 0:
-                        queue.append(title)
+                    in_degree[subject] -= 1
+                    if in_degree[subject] == 0:
+                        queue.append(subject)
 
-        if visited != len(task_titles):
+        if visited != len(task_subjects):
             raise ValueError(
                 f"Team '{self.name}' has a dependency cycle in its tasks"
             )
@@ -114,7 +114,7 @@ class WorkflowSpec(BaseModel):
             for task in team.tasks:
                 if task.assign_to not in agent_names:
                     raise ValueError(
-                        f"Task '{task.title}' assigns to unknown agent '{task.assign_to}'"
+                        f"Task '{task.subject}' assigns to unknown agent '{task.assign_to}'"
                     )
             # Check for dependency cycles
             team.detect_dependency_cycles()
