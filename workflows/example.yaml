@@ -1,0 +1,56 @@
+apiVersion: telemachy/v1
+
+metadata:
+  name: codebase-audit
+  description: >
+    Audit a Python codebase: one agent researches the architecture and produces
+    a findings report; a second agent implements recommended improvements based
+    on that report; a third agent writes tests for the new code.
+
+agents:
+  - name: architect
+    program: claude-code
+    model: claude-opus-4-5
+    working_dir: /workspace/audit
+    runtime: local
+
+  - name: implementer
+    program: claude-code
+    model: claude-sonnet-4-5
+    working_dir: /workspace/audit
+    runtime: local
+
+teams:
+  - name: audit-team
+    agents:
+      - architect
+      - implementer
+    tasks:
+      - title: "Analyse repository structure"
+        description: >
+          Explore the repository at /workspace/audit. Identify the main modules,
+          their responsibilities, and any obvious architectural concerns (tight
+          coupling, missing abstractions, lack of tests). Write a detailed
+          findings report to /workspace/audit/FINDINGS.md.
+        assign_to: architect
+
+      - title: "Refactor highest-priority module"
+        description: >
+          Read FINDINGS.md. Select the module with the highest refactoring
+          priority. Apply the recommended improvements: introduce proper
+          abstractions, add type hints, and document public APIs. Commit the
+          changes with a clear message.
+        assign_to: implementer
+        depends_on:
+          - "Analyse repository structure"
+
+      - title: "Write unit tests for refactored module"
+        description: >
+          Read FINDINGS.md to identify which module was refactored. Write a
+          comprehensive pytest test suite covering the public API of that module.
+          Aim for at least 80% branch coverage. Place tests under tests/.
+        assign_to: implementer
+        depends_on:
+          - "Refactor highest-priority module"
+
+teardown: on_completion

@@ -1,0 +1,93 @@
+apiVersion: telemachy/v1
+
+metadata:
+  name: fleet-security-analysis
+  description: >
+    Deploy a fleet of three docker-based AchaeanFleet agents to perform a
+    distributed security analysis across three microservices. Each agent
+    analyses one service independently; a lead agent aggregates the findings
+    into an executive summary.
+
+agents:
+  - name: scout-alpha
+    program: claude-code
+    model: claude-sonnet-4-5
+    working_dir: /workspace/services/auth-service
+    runtime: docker
+    docker_image: ghcr.io/homericintelligence/achaeanfleet:latest
+    cpus: 2
+    memory: 4g
+
+  - name: scout-beta
+    program: claude-code
+    model: claude-sonnet-4-5
+    working_dir: /workspace/services/payment-service
+    runtime: docker
+    docker_image: ghcr.io/homericintelligence/achaeanfleet:latest
+    cpus: 2
+    memory: 4g
+
+  - name: scout-gamma
+    program: claude-code
+    model: claude-sonnet-4-5
+    working_dir: /workspace/services/notification-service
+    runtime: docker
+    docker_image: ghcr.io/homericintelligence/achaeanfleet:latest
+    cpus: 2
+    memory: 4g
+
+  - name: lead-analyst
+    program: claude-code
+    model: claude-opus-4-5
+    working_dir: /workspace/reports
+    runtime: docker
+    docker_image: ghcr.io/homericintelligence/achaeanfleet:latest
+    cpus: 4
+    memory: 8g
+
+teams:
+  - name: security-fleet
+    agents:
+      - scout-alpha
+      - scout-beta
+      - scout-gamma
+      - lead-analyst
+    tasks:
+      - title: "Audit auth-service for security vulnerabilities"
+        description: >
+          Analyse the auth-service codebase at /workspace/services/auth-service.
+          Check for: SQL injection, broken authentication, insecure token handling,
+          missing input validation, and hardcoded credentials.
+          Write findings to /workspace/reports/auth-service-findings.md.
+        assign_to: scout-alpha
+
+      - title: "Audit payment-service for security vulnerabilities"
+        description: >
+          Analyse the payment-service codebase at /workspace/services/payment-service.
+          Check for: PCI-DSS compliance gaps, insecure direct object references,
+          insufficient logging, and cryptographic weaknesses.
+          Write findings to /workspace/reports/payment-service-findings.md.
+        assign_to: scout-beta
+
+      - title: "Audit notification-service for security vulnerabilities"
+        description: >
+          Analyse the notification-service codebase at
+          /workspace/services/notification-service.
+          Check for: SSRF, template injection, unvalidated redirects, and
+          overly permissive CORS configuration.
+          Write findings to /workspace/reports/notification-service-findings.md.
+        assign_to: scout-gamma
+
+      - title: "Aggregate findings into executive security report"
+        description: >
+          Read all three findings files under /workspace/reports/.
+          Produce an executive summary at /workspace/reports/SECURITY-REPORT.md
+          that includes: overall risk rating, top 5 critical findings ranked by
+          severity, a recommended remediation roadmap, and per-service risk scores.
+        assign_to: lead-analyst
+        depends_on:
+          - "Audit auth-service for security vulnerabilities"
+          - "Audit payment-service for security vulnerabilities"
+          - "Audit notification-service for security vulnerabilities"
+
+teardown: on_completion

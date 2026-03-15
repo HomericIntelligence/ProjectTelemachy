@@ -1,0 +1,33 @@
+[workspace]
+name = "ProjectTelemachy"
+version = "0.1.0"
+description = "Declarative workflow engine for ai-maestro multi-agent workflows"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[workspace.dependencies]
+python = ">=3.10"
+
+[pypi-dependencies]
+pydantic       = ">=2.0"
+httpx          = ">=0.27"
+nats-py        = ">=2.0"
+pyyaml         = ">=6.0"
+rich           = ">=13.0"
+typer          = ">=0.12"
+python-dotenv  = ">=1.0"
+
+[tasks]
+run    = "just run"
+test   = "just test"
+lint   = "just lint"
+format = "just format"
+
+[feature.dev.pypi-dependencies]
+pytest          = ">=8.0"
+pytest-asyncio  = ">=0.23"
+ruff            = ">=0.4"
+mypy            = ">=1.10"
+
+[environments]
+default = { features = ["dev"], solve-group = "default" }
