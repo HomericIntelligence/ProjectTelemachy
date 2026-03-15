@@ -74,9 +74,9 @@ def _print_plan(spec: WorkflowSpec) -> None:
         task_table.add_column("Depends on")
         for task in team.tasks:
             task_table.add_row(
-                task.title,
+                task.subject,
                 task.assign_to,
-                ", ".join(task.depends_on) or "-",
+                ", ".join(task.blocked_by) or "-",
             )
         console.print(task_table)
 
