@@ -102,7 +102,7 @@ class TestProvisioning:
         spec = _make_spec(
             agents=[
                 {
-                    "name": "docker-worker",
+                    "name": "worker",
                     "runtime": "docker",
                     "docker_image": "example/img:latest",
                 }
