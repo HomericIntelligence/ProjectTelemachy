@@ -1,5 +1,5 @@
 [workspace]
-name = "ProjectTelemachy"
+name = "project-telemachy"
 version = "0.1.0"
 description = "Declarative workflow engine for ai-maestro multi-agent workflows"
 channels = ["conda-forge"]
@@ -9,13 +9,13 @@ platforms = ["linux-64"]
 python = ">=3.10"
 
 [pypi-dependencies]
-pydantic       = ">=2.0"
-httpx          = ">=0.27"
-nats-py        = ">=2.0"
-pyyaml         = ">=6.0"
-rich           = ">=13.0"
-typer          = ">=0.12"
-python-dotenv  = ">=1.0"
+pydantic          = ">=2.0"
+pydantic-settings = ">=2.0"
+httpx             = ">=0.27"
+nats-py           = ">=2.0"
+pyyaml            = ">=6.0"
+rich              = ">=13.0"
+typer             = ">=0.12"
 
 [tasks]
 run    = "just run"

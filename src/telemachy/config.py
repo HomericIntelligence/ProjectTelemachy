@@ -2,24 +2,21 @@
 
 from __future__ import annotations
 
-import os
-
-from dotenv import load_dotenv
-
-load_dotenv()
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
+class Settings(BaseSettings):
     """Application settings for ProjectTelemachy, loaded from env / .env file."""
 
-    maestro_url: str
-    maestro_api_key: str
-    nats_url: str
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
-    def __init__(self) -> None:
-        self.maestro_url = os.environ.get("MAESTRO_URL", "http://172.20.0.1:23000")
-        self.maestro_api_key = os.environ.get("MAESTRO_API_KEY", "")
-        self.nats_url = os.environ.get("NATS_URL", "nats://localhost:4222")
+    maestro_url: str = "http://172.20.0.1:23000"
+    maestro_api_key: str = ""
+    nats_url: str = "nats://localhost:4222"
 
 
 settings = Settings()
