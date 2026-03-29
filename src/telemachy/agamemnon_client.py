@@ -15,10 +15,6 @@ class AgamemnonError(Exception):
         super().__init__(f"Agamemnon API error {status_code}: {message}")
 
 
-# Backward-compat alias
-MaestroError = AgamemnonError
-
-
 class AgamemnonClient:
     """Async client for ProjectAgamemnon REST API endpoints used by Telemachy."""
 
@@ -180,7 +176,3 @@ class AgamemnonClient:
         response = await self._http.get(f"/v1/teams/{team_id}/tasks")
         self._raise_for_status(response)
         return response.json()["tasks"]  # type: ignore[return-value]
-
-
-# Backward-compat alias so existing imports don't break immediately
-MaestroClient = AgamemnonClient
