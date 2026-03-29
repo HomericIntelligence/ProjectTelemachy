@@ -1,19 +1,19 @@
 # ProjectTelemachy
 
-A declarative workflow engine for [ai-maestro](https://github.com/HomericIntelligence/ai-maestro). Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, event monitoring, and teardown via the ai-maestro REST API.
+A declarative workflow engine for [ProjectAgamemnon](https://github.com/HomericIntelligence/ProjectAgamemnon). Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, event monitoring, and teardown via the Agamemnon REST API.
 
 ## Overview
 
-Telemachy reads a workflow YAML file, creates agents and teams through ai-maestro, assigns tasks with dependency ordering, monitors task completion via NATS events, and tears down provisioned resources according to your policy.
+Telemachy reads a workflow YAML file, creates agents and teams through ProjectAgamemnon, assigns tasks with dependency ordering, monitors task completion via NATS events, and tears down provisioned resources according to your policy.
 
-No separate agent system is used. All execution is driven exclusively through ai-maestro.
+No separate agent system is used. All execution is driven exclusively through ProjectAgamemnon.
 
 ## Quick Start
 
 ```bash
 # Copy and configure environment
 cp .env.example .env
-# Edit .env with your MAESTRO_URL and API key
+# Edit .env with your AGAMEMNON_URL and API key
 
 # Run a workflow
 just run workflows/example.yaml

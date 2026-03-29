@@ -19,7 +19,7 @@ from telemachy.models import WorkflowSpec
 
 app = typer.Typer(
     name="telemachy",
-    help="Declarative workflow engine for ai-maestro.",
+    help="Declarative workflow engine for ProjectAgamemnon.",
     add_completion=False,
 )
 console = Console()
@@ -140,7 +140,7 @@ def status(
     console.print(
         f"[yellow]Status lookup for workflow '{workflow_id}' requires a state backend.[/yellow]\n"
         "Persistent workflow state storage is not yet implemented.\n"
-        "Check ai-maestro directly for agent/team status."
+        "Check ProjectAgamemnon directly for agent/team status."
     )
 
 

@@ -1,7 +1,7 @@
 # === Variables ===
 
-MAESTRO_URL := env_var_or_default("MAESTRO_URL", "http://172.20.0.1:23000")
-NATS_URL    := env_var_or_default("NATS_URL", "nats://localhost:4222")
+AGAMEMNON_URL := env_var_or_default("AGAMEMNON_URL", "http://localhost:8080")
+NATS_URL      := env_var_or_default("NATS_URL", "nats://localhost:4222")
 
 # === Default ===
 
@@ -12,27 +12,27 @@ default:
 
 # Execute a workflow YAML file
 run WORKFLOW:
-    MAESTRO_URL={{MAESTRO_URL}} NATS_URL={{NATS_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
         pixi run python -m telemachy.cli run {{WORKFLOW}}
 
 # Dry-run: show what would be created without executing
 plan WORKFLOW:
-    MAESTRO_URL={{MAESTRO_URL}} NATS_URL={{NATS_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
         pixi run python -m telemachy.cli plan {{WORKFLOW}}
 
 # Show status of a running workflow
 status WORKFLOW_ID:
-    MAESTRO_URL={{MAESTRO_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} \
         pixi run python -m telemachy.cli status {{WORKFLOW_ID}}
 
 # List all workflows (running and completed)
 list:
-    MAESTRO_URL={{MAESTRO_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} \
         pixi run python -m telemachy.cli list
 
 # Cancel a running workflow
 cancel WORKFLOW_ID:
-    MAESTRO_URL={{MAESTRO_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} \
         pixi run python -m telemachy.cli cancel {{WORKFLOW_ID}}
 
 # Validate a workflow YAML without executing

@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from telemachy.executor import WorkflowExecutor
-from telemachy.maestro_client import MaestroClient
+from telemachy.agamemnon_client import AgamemnonClient
 from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
 
 
@@ -43,7 +43,7 @@ def _make_spec(
 
 
 def _make_mock_client() -> MagicMock:
-    client = MagicMock(spec=MaestroClient)
+    client = MagicMock(spec=AgamemnonClient)
     client.create_agent = AsyncMock(return_value="agent-id-001")
     client.wake_agent = AsyncMock()
     client.hibernate_agent = AsyncMock()

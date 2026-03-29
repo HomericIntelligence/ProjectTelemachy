@@ -8,7 +8,7 @@ from pydantic import BaseModel, field_validator, model_validator
 
 
 class AgentSpec(BaseModel):
-    """Specification for a single ai-maestro agent to provision."""
+    """Specification for a single Agamemnon agent to provision."""
 
     name: str
     program: str = "claude-code"
@@ -136,8 +136,8 @@ class WorkflowState(BaseModel):
     workflow_id: str
     spec: WorkflowSpec
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
-    created_agents: dict[str, str] = {}  # agent name → maestro agent id
-    created_teams: dict[str, str] = {}   # team name → maestro team id
+    created_agents: dict[str, str] = {}  # agent name → agamemnon agent id
+    created_teams: dict[str, str] = {}   # team name → agamemnon team id
     started_at: str | None = None
     completed_at: str | None = None
     error: str | None = None

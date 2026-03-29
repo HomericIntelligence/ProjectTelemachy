@@ -1,4 +1,4 @@
-"""WorkflowExecutor: orchestrates the full workflow lifecycle via ai-maestro."""
+"""WorkflowExecutor: orchestrates the full workflow lifecycle via ProjectAgamemnon."""
 
 from __future__ import annotations
 
@@ -8,21 +8,21 @@ import uuid
 from datetime import datetime, timezone
 
 from telemachy.config import settings
-from telemachy.maestro_client import MaestroClient, MaestroError
+from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
 from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
 
 logger = logging.getLogger(__name__)
 
-# Terminal task statuses reported by ai-maestro
+# Terminal task statuses reported by ProjectAgamemnon
 _DONE_STATUSES = {"completed", "backlog", "failed", "error", "cancelled"}
 
 
 class WorkflowExecutor:
-    """Executes a WorkflowSpec against ai-maestro, monitoring until completion."""
+    """Executes a WorkflowSpec against Agamemnon, monitoring until completion."""
 
     def __init__(
         self,
-        client: MaestroClient,
+        client: AgamemnonClient,
         poll_interval: float = 5.0,
     ) -> None:
         self._client = client
@@ -77,7 +77,7 @@ class WorkflowExecutor:
     # === Provisioning ===
 
     async def _provision_agents(self, agents: list[AgentSpec]) -> dict[str, str]:
-        """Create all agents concurrently. Returns {agent_name: maestro_id}."""
+        """Create all agents concurrently. Returns {agent_name: agamemnon_id}."""
         logger.info("Provisioning %d agent(s)...", len(agents))
         tasks = [self._provision_one_agent(agent) for agent in agents]
         results: list[tuple[str, str]] = await asyncio.gather(*tasks)
@@ -86,7 +86,7 @@ class WorkflowExecutor:
         return id_map
 
     async def _provision_one_agent(self, spec: AgentSpec) -> tuple[str, str]:
-        """Create a single agent and wake it. Returns (name, maestro_id)."""
+        """Create a single agent and wake it. Returns (name, agamemnon_id)."""
         agent_id = await self._client.create_agent(spec)
         logger.debug("Created agent '%s' → id=%s", spec.name, agent_id)
         await self._client.wake_agent(agent_id)
@@ -203,7 +203,7 @@ class WorkflowExecutor:
             try:
                 await self._client.delete_agent(agent_id)
                 logger.debug("Deleted agent '%s' (id=%s)", name, agent_id)
-            except MaestroError as exc:
+            except AgamemnonError as exc:
                 logger.warning("Failed to delete agent '%s': %s", name, exc)
 
         logger.info("Teardown complete")
@@ -215,9 +215,9 @@ def _now() -> str:
 
 async def run_workflow(spec: WorkflowSpec) -> WorkflowState:
     """Convenience function: create a client from settings and execute a workflow."""
-    async with MaestroClient(
-        url=settings.maestro_url,
-        api_key=settings.maestro_api_key,
+    async with AgamemnonClient(
+        url=settings.agamemnon_url,
+        api_key=settings.agamemnon_api_key,
     ) as client:
         executor = WorkflowExecutor(client)
         return await executor.execute(spec)
