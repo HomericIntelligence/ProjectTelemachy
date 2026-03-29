@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the ai-maestro REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and teams via ai-maestro, assigns tasks with dependency ordering, monitors execution via NATS events, and tears down resources according to the workflow's teardown policy.
+ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the ProjectAgamemnon REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and teams via Agamemnon, assigns tasks with dependency ordering, monitors execution via NATS events, and tears down resources according to the workflow's teardown policy.
 
-**This project uses ai-maestro exclusively as its execution backend.** There is no parallel agent system — all agent lifecycle management flows through ai-maestro's REST API.
+**This project uses ProjectAgamemnon exclusively as its execution backend.** There is no parallel agent system — all agent lifecycle management flows through Agamemnon's REST API.
 
 ## Architecture
 
@@ -16,18 +16,19 @@ WorkflowSpec (Pydantic)
     │
     ▼
 WorkflowExecutor
-    ├── MaestroClient  →  POST /api/agents          (create agents)
-    ├── MaestroClient  →  POST /api/agents/{id}/wake (wake agents)
-    ├── MaestroClient  →  POST /api/teams            (create teams)
-    ├── MaestroClient  →  POST /api/teams/{id}/tasks (create tasks)
-    ├── NATS subscriber →  monitor task completion events
-    └── MaestroClient  →  DELETE /api/agents/{id}    (teardown)
+    ├── AgamemnonClient  →  POST /v1/agents              (create agents)
+    ├── AgamemnonClient  →  POST /v1/agents/{id}/start   (start agents)
+    ├── AgamemnonClient  →  POST /v1/teams               (create teams)
+    ├── AgamemnonClient  →  POST /v1/teams/{id}/tasks    (create tasks)
+    ├── NATS subscriber  →  monitor task completion events
+    └── AgamemnonClient  →  DELETE /v1/agents/{id}       (teardown)
 ```
 
 ### Key Components
 
 - `telemachy/models.py` — Pydantic models for the workflow schema (AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState)
-- `telemachy/maestro_client.py` — Async HTTP client wrapping all ai-maestro REST endpoints used
+- `telemachy/agamemnon_client.py` — Async HTTP client wrapping all ProjectAgamemnon REST endpoints used
+- `telemachy/maestro_client.py` — DEPRECATED: backward-compat stub re-exporting from agamemnon_client
 - `telemachy/executor.py` — Orchestrates the full workflow lifecycle: provision → assign tasks → monitor → teardown
 - `telemachy/cli.py` — Typer CLI (`run`, `plan`, `status`, `validate`, `list`, `cancel`)
 - `telemachy/config.py` — Settings loaded from environment / `.env`
@@ -62,7 +63,7 @@ teardown: on_completion | on_failure | never
 ## Key Principles
 
 1. **Declarative** — workflows describe desired state; Telemachy handles how to get there.
-2. **ai-maestro exclusive** — never spawn agents directly; always call ai-maestro's REST API.
+2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
 4. **Dependency-respecting** — tasks with `depends_on` are not submitted until their predecessors complete.
 5. **Observable** — all state transitions are logged; NATS events drive completion detection.
@@ -74,15 +75,16 @@ teardown: on_completion | on_failure | never
 ProjectTelemachy/
 ├── src/
 │   └── telemachy/
-│       ├── __init__.py        # version
-│       ├── cli.py             # Typer CLI entry point
-│       ├── config.py          # Settings / env vars
-│       ├── executor.py        # WorkflowExecutor
-│       ├── maestro_client.py  # ai-maestro REST client
-│       └── models.py          # Pydantic workflow models
+│       ├── __init__.py           # version
+│       ├── cli.py                # Typer CLI entry point
+│       ├── config.py             # Settings / env vars
+│       ├── executor.py           # WorkflowExecutor
+│       ├── agamemnon_client.py   # ProjectAgamemnon REST client
+│       ├── maestro_client.py     # DEPRECATED: backward-compat stub
+│       └── models.py             # Pydantic workflow models
 ├── workflows/
-│   ├── example.yaml           # Simple 2-agent example
-│   └── fleet-deploy.yaml      # Docker fleet example
+│   ├── example.yaml              # Simple 2-agent example
+│   └── fleet-deploy.yaml         # Docker fleet example
 ├── tests/
 │   ├── __init__.py
 │   ├── test_models.py
@@ -100,8 +102,8 @@ ProjectTelemachy/
 - Use `async`/`await` throughout for I/O operations (HTTP, NATS).
 - Use `httpx.AsyncClient` for all HTTP calls; never `requests`.
 - Pydantic v2 models for all structured data.
-- Errors from ai-maestro should raise typed exceptions, not generic ones.
-- Tests use `pytest-asyncio` and mock the `MaestroClient` at the boundary.
+- Errors from Agamemnon should raise typed exceptions, not generic ones.
+- Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
 
 ## Common Commands
 
@@ -121,6 +123,6 @@ just format                        # ruff format
 
 | Variable | Default | Description |
 |---|---|---|
-| `MAESTRO_URL` | `http://172.20.0.1:23000` | ai-maestro base URL |
-| `MAESTRO_API_KEY` | `` | API key (if auth enabled) |
+| `AGAMEMNON_URL` | `http://localhost:8080` | ProjectAgamemnon base URL |
+| `AGAMEMNON_API_KEY` | `` | API key (if auth enabled) |
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL for event monitoring |
