@@ -28,7 +28,6 @@ WorkflowExecutor
 
 - `telemachy/models.py` — Pydantic models for the workflow schema (AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState)
 - `telemachy/agamemnon_client.py` — Async HTTP client wrapping all ProjectAgamemnon REST endpoints used
-- `telemachy/maestro_client.py` — DEPRECATED: backward-compat stub re-exporting from agamemnon_client
 - `telemachy/executor.py` — Orchestrates the full workflow lifecycle: provision → assign tasks → monitor → teardown
 - `telemachy/cli.py` — Typer CLI (`run`, `plan`, `status`, `validate`, `list`, `cancel`)
 - `telemachy/config.py` — Settings loaded from environment / `.env`
@@ -80,7 +79,6 @@ ProjectTelemachy/
 │       ├── config.py             # Settings / env vars
 │       ├── executor.py           # WorkflowExecutor
 │       ├── agamemnon_client.py   # ProjectAgamemnon REST client
-│       ├── maestro_client.py     # DEPRECATED: backward-compat stub
 │       └── models.py             # Pydantic workflow models
 ├── workflows/
 │   ├── example.yaml              # Simple 2-agent example
