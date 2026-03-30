@@ -1,0 +1,17 @@
+apiVersion: telemachy/v1
+metadata:
+  name: hello-world-e2e
+  description: "E2E validation: send hello world through the full pipeline"
+agents:
+  - name: hello-worker
+    program: none
+    working_dir: /tmp
+    runtime: local
+teams:
+  - name: hello-team
+    agents: [hello-worker]
+    tasks:
+      - subject: "Say hello world"
+        description: "Process a hello world message and return the result"
+        assign_to: hello-worker
+teardown: on_completion
