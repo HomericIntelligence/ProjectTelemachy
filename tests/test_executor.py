@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 from telemachy.executor import WorkflowExecutor
 from telemachy.agamemnon_client import AgamemnonClient
-from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
+from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_spec(
     agents: list[dict] | None = None,
@@ -62,6 +62,7 @@ def _make_mock_client() -> MagicMock:
 # Tests: provisioning
 # ---------------------------------------------------------------------------
 
+
 class TestProvisioning:
     @pytest.mark.asyncio
     async def test_create_agent_called_for_each_agent(self) -> None:
@@ -79,7 +80,7 @@ class TestProvisioning:
         client.create_agent = AsyncMock(side_effect=["id-a", "id-b"])
 
         executor = WorkflowExecutor(client, poll_interval=0.01)
-        state = await executor.execute(spec)
+        await executor.execute(spec)
 
         assert client.create_agent.call_count == 2
         assert client.wake_agent.call_count == 2
@@ -122,6 +123,7 @@ class TestProvisioning:
 # Tests: team and task creation
 # ---------------------------------------------------------------------------
 
+
 class TestTaskCreation:
     @pytest.mark.asyncio
     async def test_create_team_called(self) -> None:
@@ -155,7 +157,9 @@ class TestTaskCreation:
         """Task with blocked_by must not be submitted before its dependency completes."""
         call_order: list[str] = []
 
-        async def fake_create_task(team_id: str, spec: TaskSpec, blocked_by_ids: list[str] | None = None) -> str:
+        async def fake_create_task(
+            team_id: str, spec: TaskSpec, blocked_by_ids: list[str] | None = None
+        ) -> str:
             call_order.append(spec.subject)
             return f"task-{len(call_order)}"
 
@@ -163,7 +167,10 @@ class TestTaskCreation:
         get_tasks_responses = [
             [{"subject": "Step 1", "status": "pending"}],
             [{"subject": "Step 1", "status": "completed"}],
-            [{"subject": "Step 1", "status": "completed"}, {"subject": "Step 2", "status": "completed"}],
+            [
+                {"subject": "Step 1", "status": "completed"},
+                {"subject": "Step 2", "status": "completed"},
+            ],
         ]
         call_count = {"n": 0}
 
@@ -197,6 +204,7 @@ class TestTaskCreation:
 # ---------------------------------------------------------------------------
 # Tests: teardown
 # ---------------------------------------------------------------------------
+
 
 class TestTeardown:
     @pytest.mark.asyncio
