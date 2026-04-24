@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import pytest_asyncio
 
 from telemachy.executor import WorkflowExecutor
 from telemachy.agamemnon_client import AgamemnonClient
-from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
+from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +78,7 @@ class TestProvisioning:
         client.create_agent = AsyncMock(side_effect=["id-a", "id-b"])
 
         executor = WorkflowExecutor(client, poll_interval=0.01)
-        state = await executor.execute(spec)
+        await executor.execute(spec)
 
         assert client.create_agent.call_count == 2
         assert client.wake_agent.call_count == 2

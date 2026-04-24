@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from telemachy.config import settings
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
-from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
+from telemachy.models import AgentSpec, TeamSpec, WorkflowSpec, WorkflowState
 
 logger = logging.getLogger(__name__)
 
