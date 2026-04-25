@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -23,6 +24,25 @@ app = typer.Typer(
 )
 console = Console()
 err_console = Console(stderr=True)
+
+_SHELL_METACHARACTERS: re.Pattern[str] = re.compile(r"[;&|$`><(){}\[\]!?*~\\]")
+
+
+def _validate_workflow_path(path: Path) -> None:
+    """Validate that *path* is safe to use as a workflow file path.
+
+    Raises :class:`typer.BadParameter` if the path string contains shell
+    metacharacters, or if the resolved path does not point to an existing file.
+    """
+    raw = str(path)
+    if _SHELL_METACHARACTERS.search(raw):
+        raise typer.BadParameter(
+            f"Workflow path contains disallowed shell metacharacters: {raw!r}"
+        )
+    if not path.exists():
+        raise typer.BadParameter(f"Workflow file not found: {raw!r}")
+    if not path.is_file():
+        raise typer.BadParameter(f"Workflow path is not a file: {raw!r}")
 
 
 def _load_workflow(workflow_path: Path) -> WorkflowSpec:
@@ -88,6 +108,7 @@ def run(
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan without executing")] = False,
 ) -> None:
     """Execute a workflow YAML file."""
+    _validate_workflow_path(workflow_path)
     spec = _load_workflow(workflow_path)
 
     if dry_run:
@@ -114,6 +135,7 @@ def plan(
     workflow_path: Annotated[Path, typer.Argument(help="Path to workflow YAML file")],
 ) -> None:
     """Dry-run: print what would be created without executing."""
+    _validate_workflow_path(workflow_path)
     spec = _load_workflow(workflow_path)
     _print_plan(spec)
 
@@ -123,6 +145,7 @@ def validate(
     workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
 ) -> None:
     """Validate a workflow YAML file against the Telemachy schema."""
+    _validate_workflow_path(workflow_path)
     spec = _load_workflow(workflow_path)
     console.print(f"[bold green]Valid.[/bold green] Workflow: {spec.name}")
 
