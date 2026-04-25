@@ -77,7 +77,7 @@ jobs:
             echo "Schema export not available — YAML parse validation already passed above"
           fi
 
-  security/dependency-scan:
+  security-dependency-scan:
     name: security/dependency-scan
     runs-on: ubuntu-latest
     steps:
@@ -92,7 +92,7 @@ jobs:
           pixi run python -m pip freeze > /tmp/requirements-freeze.txt
           pip-audit -r /tmp/requirements-freeze.txt --skip-editable
 
-  security/secrets-scan:
+  security-secrets-scan:
     name: security/secrets-scan
     runs-on: ubuntu-latest
     steps:
@@ -141,7 +141,7 @@ jobs:
             xargs check-jsonschema \
               --schemafile https://json.schemastore.org/github-workflow
 
-  deps/version-sync:
+  deps-version-sync:
     name: deps/version-sync
     runs-on: ubuntu-latest
     steps:
