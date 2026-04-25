@@ -69,6 +69,17 @@ class TeamSpec(BaseModel):
             raise ValueError(f"Duplicate task subjects in team {self.name!r}: {dupes}")
         return self
 
+    @model_validator(mode="after")
+    def validate_task_assignments(self) -> "TeamSpec":
+        for task in self.tasks:
+            if task.assign_to not in self.agents:
+                raise ValueError(
+                    f"Task {task.subject!r} assigns to agent {task.assign_to!r} "
+                    f"which is not in team {self.name!r}. "
+                    f"Team agents: {self.agents}"
+                )
+        return self
+
     def detect_dependency_cycles(self) -> None:
         """Raise ValueError if task dependencies contain a cycle."""
         task_subjects = {t.subject for t in self.tasks}
