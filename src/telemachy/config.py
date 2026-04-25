@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     workflows_dir: Path = Path("workflows")
     host_id: str = "hermes"
     require_tls: bool = False
+    monitor_timeout_seconds: float = 3600.0
+    monitor_max_polls: int = 7200
 
 
 settings = Settings()
