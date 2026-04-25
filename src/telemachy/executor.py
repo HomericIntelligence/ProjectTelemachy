@@ -142,7 +142,13 @@ class WorkflowExecutor:
 
             for task_spec in ready:
                 blocked_by_ids = [submitted[dep] for dep in task_spec.blocked_by if dep in submitted]
-                task_id = await self._client.create_task(team_id, task_spec, blocked_by_ids)
+                # Resolve agent name → Agamemnon agent ID before submitting (#12)
+                resolved_agent_id: str | None = None
+                if task_spec.assign_to:
+                    resolved_agent_id = agent_ids.get(task_spec.assign_to)
+                task_id = await self._client.create_task(
+                    team_id, task_spec, blocked_by_ids, assignee_agent_id=resolved_agent_id
+                )
                 submitted[task_spec.subject] = task_id
                 logger.info(
                     "Submitted task '%s' → id=%s", task_spec.subject, task_id
@@ -218,6 +224,9 @@ async def run_workflow(spec: WorkflowSpec) -> WorkflowState:
     async with AgamemnonClient(
         url=settings.agamemnon_url,
         api_key=settings.agamemnon_api_key,
+        host_id=settings.host_id,
+        require_tls=settings.require_tls,
+        nats_url=settings.nats_url,
     ) as client:
         executor = WorkflowExecutor(client)
         return await executor.execute(spec)
