@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import signal
 from pathlib import Path
 from typing import Annotated
 
@@ -14,6 +15,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from telemachy.agamemnon_client import AgamemnonClient
 from telemachy.config import settings
 from telemachy.executor import WorkflowExecutor, run_workflow
 from telemachy.models import WorkflowSpec
@@ -133,17 +135,37 @@ def run(
 
     console.print(f"[bold green]Running workflow:[/bold green] {spec.name}")
 
-    state = asyncio.run(run_workflow(spec))
+    async def _run_with_signals() -> None:
+        stop_event = asyncio.Event()
 
-    if state.status == "completed":
-        console.print(f"[bold green]Workflow completed.[/bold green] id={state.workflow_id}")
-    else:
-        console.print(
-            f"[bold red]Workflow {state.status}.[/bold red] "
-            f"id={state.workflow_id}"
-            + (f"  error={state.error}" if state.error else "")
-        )
-        raise typer.Exit(1)
+        def _handle_signal(sig: int, _frame: object) -> None:
+            logger.warning("Received signal %s, initiating graceful shutdown...", sig)
+            stop_event.set()
+
+        signal.signal(signal.SIGINT, _handle_signal)
+        signal.signal(signal.SIGTERM, _handle_signal)
+
+        async with AgamemnonClient(
+            url=settings.agamemnon_url,
+            api_key=settings.agamemnon_api_key,
+            host_id=settings.host_id,
+            require_tls=settings.require_tls,
+            nats_url=settings.nats_url,
+        ) as client:
+            executor = WorkflowExecutor(client, stop_event=stop_event)
+            result = await executor.execute(spec)
+
+        if result.status == "completed":
+            console.print(f"[bold green]Workflow completed.[/bold green] id={result.workflow_id}")
+        else:
+            console.print(
+                f"[bold red]Workflow {result.status}.[/bold red] "
+                f"id={result.workflow_id}"
+                + (f"  error={result.error}" if result.error else "")
+            )
+            raise typer.Exit(1)
+
+    asyncio.run(_run_with_signals())
 
 
 @app.command()
