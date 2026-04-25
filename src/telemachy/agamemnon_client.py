@@ -35,8 +35,9 @@ def _require(data: dict[str, Any], *keys: str, context: str = "") -> Any:
 class AgamemnonClient:
     """Async client for ProjectAgamemnon REST API endpoints used by Telemachy."""
 
-    def __init__(self, url: str, api_key: str = "") -> None:
+    def __init__(self, url: str, api_key: str = "", host_id: str = "hermes") -> None:
         self._base_url = url.rstrip("/")
+        self._host_id = host_id
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -113,7 +114,7 @@ class AgamemnonClient:
     async def _create_docker_agent(self, spec: AgentSpec) -> str:
         payload: dict[str, object] = {
             "name": spec.name,
-            "hostId": "hermes",
+            "hostId": self._host_id,
             "image": spec.docker_image,
             "cpus": spec.cpus,
             "memory": spec.memory,
