@@ -1,0 +1,195 @@
+{
+  "$defs": {
+    "AgentSpec": {
+      "additionalProperties": false,
+      "description": "Specification for a single Agamemnon agent to provision.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "program": {
+          "default": "claude-code",
+          "title": "Program",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "working_dir": {
+          "default": "/tmp",
+          "title": "Working Dir",
+          "type": "string"
+        },
+        "runtime": {
+          "default": "local",
+          "enum": [
+            "local",
+            "docker"
+          ],
+          "title": "Runtime",
+          "type": "string"
+        },
+        "docker_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Docker Image"
+        },
+        "cpus": {
+          "default": 2,
+          "title": "Cpus",
+          "type": "integer"
+        },
+        "memory": {
+          "default": "4g",
+          "title": "Memory",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "AgentSpec",
+      "type": "object"
+    },
+    "TaskSpec": {
+      "additionalProperties": false,
+      "description": "Specification for a single task within a team.",
+      "properties": {
+        "subject": {
+          "title": "Subject",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "assign_to": {
+          "title": "Assign To",
+          "type": "string"
+        },
+        "blocked_by": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocked By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "subject",
+        "description",
+        "assign_to"
+      ],
+      "title": "TaskSpec",
+      "type": "object"
+    },
+    "TeamSpec": {
+      "additionalProperties": false,
+      "description": "Specification for a team of agents and their tasks.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "agents": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Agents",
+          "type": "array"
+        },
+        "tasks": {
+          "items": {
+            "$ref": "#/$defs/TaskSpec"
+          },
+          "title": "Tasks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "agents",
+        "tasks"
+      ],
+      "title": "TeamSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Top-level workflow specification parsed from a workflow YAML file.",
+  "properties": {
+    "apiVersion": {
+      "default": "telemachy/v1",
+      "title": "Apiversion",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Metadata",
+      "type": "object"
+    },
+    "agents": {
+      "items": {
+        "$ref": "#/$defs/AgentSpec"
+      },
+      "title": "Agents",
+      "type": "array"
+    },
+    "teams": {
+      "items": {
+        "$ref": "#/$defs/TeamSpec"
+      },
+      "title": "Teams",
+      "type": "array"
+    },
+    "teardown": {
+      "default": "on_completion",
+      "enum": [
+        "on_completion",
+        "on_failure",
+        "never"
+      ],
+      "title": "Teardown",
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timeout Seconds"
+    }
+  },
+  "required": [
+    "metadata",
+    "agents",
+    "teams"
+  ],
+  "title": "WorkflowSpec",
+  "type": "object"
+}
