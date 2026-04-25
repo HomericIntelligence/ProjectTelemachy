@@ -206,6 +206,13 @@ class WorkflowExecutor:
 
         logger.info("Running teardown for workflow '%s'...", state.spec.name)
 
+        for name, team_id in state.created_teams.items():
+            try:
+                await self._client.delete_team(team_id)
+                logger.debug("Deleted team '%s' (id=%s)", name, team_id)
+            except AgamemnonError as exc:
+                logger.warning("Failed to delete team '%s': %s", name, exc)
+
         for name, agent_id in state.created_agents.items():
             try:
                 await self._client.delete_agent(agent_id)
