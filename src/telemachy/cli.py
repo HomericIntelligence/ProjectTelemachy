@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from telemachy.config import settings
 from telemachy.executor import run_workflow
 from telemachy.models import WorkflowSpec
 
@@ -83,7 +84,7 @@ def _print_plan(spec: WorkflowSpec) -> None:
 
 @app.command()
 def run(
-    workflow_path: Annotated[Path, typer.Argument(help="Path to workflow YAML file")],
+    workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan without executing")] = False,
 ) -> None:
     """Execute a workflow YAML file."""
@@ -119,7 +120,7 @@ def plan(
 
 @app.command()
 def validate(
-    workflow_path: Annotated[Path, typer.Argument(help="Path to workflow YAML file")],
+    workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
 ) -> None:
     """Validate a workflow YAML file against the Telemachy schema."""
     spec = _load_workflow(workflow_path)

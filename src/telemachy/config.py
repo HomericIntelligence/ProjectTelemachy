@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +19,7 @@ class Settings(BaseSettings):
     agamemnon_url: str = "http://localhost:8080"
     agamemnon_api_key: str = ""
     nats_url: str = "nats://localhost:4222"
+    workflows_dir: Path = Path("workflows")
 
 
 settings = Settings()
