@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Terminal task statuses reported by ProjectAgamemnon
 # NOTE: "backlog" is an initial/queued state, NOT a terminal state — do not include it here.
 _DONE_STATUSES = {"completed", "failed", "error", "cancelled"}
+
+
+class WorkflowTimeoutError(Exception):
+    """Raised when workflow monitoring exceeds the configured timeout or max poll count."""
 
 
 class WorkflowExecutor:
@@ -162,7 +167,24 @@ class WorkflowExecutor:
         """Poll all team tasks until every task reaches a terminal status."""
         logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
 
+        poll_count = 0
+        start_time = time.monotonic()
+        timeout = settings.monitor_timeout_seconds
+        max_polls = settings.monitor_max_polls
+
         while True:
+            elapsed = time.monotonic() - start_time
+            if elapsed > timeout:
+                raise WorkflowTimeoutError(
+                    f"Monitoring timed out after {elapsed:.1f}s "
+                    f"(limit: {timeout}s) for workflow '{state.spec.name}'"
+                )
+            if poll_count > max_polls:
+                raise WorkflowTimeoutError(
+                    f"Monitoring exceeded max poll count {max_polls} "
+                    f"for workflow '{state.spec.name}'"
+                )
+
             all_done = True
             any_failed = False
 
@@ -185,6 +207,7 @@ class WorkflowExecutor:
                     raise RuntimeError("One or more tasks failed during workflow execution")
                 return
 
+            poll_count += 1
             await asyncio.sleep(self._poll_interval)
 
     # === Teardown ===
