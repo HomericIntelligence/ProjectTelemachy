@@ -39,6 +39,10 @@ cancel WORKFLOW_ID:
 validate WORKFLOW:
     pixi run python -m telemachy.cli validate {{WORKFLOW}}
 
+# Export workflow JSON Schema for editor validation
+schema:
+    pixi run python -m telemachy.cli schema
+
 # === Development ===
 
 # Run the test suite
