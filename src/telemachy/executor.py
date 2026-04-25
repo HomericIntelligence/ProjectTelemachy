@@ -91,8 +91,9 @@ class WorkflowExecutor:
         try:
             state.status = "running"
 
-            # Provision all agents concurrently
-            state.created_agents = await self._provision_agents(spec.agents)
+            # Provision all agents concurrently (partial results saved into state
+            # so teardown can clean up even if provisioning partially fails)
+            state.created_agents = await self._provision_agents(spec.agents, state)
 
             # Create teams and submit tasks (respecting dependencies)
             state.created_teams = await self._create_teams(
@@ -130,12 +131,34 @@ class WorkflowExecutor:
 
     # === Provisioning ===
 
-    async def _provision_agents(self, agents: list[AgentSpec]) -> dict[str, str]:
-        """Create all agents concurrently. Returns {agent_name: agamemnon_id}."""
+    async def _provision_agents(
+        self,
+        agents: list[AgentSpec],
+        state: "WorkflowState",
+    ) -> dict[str, str]:
+        """Create all agents concurrently. Returns {agent_name: agamemnon_id}.
+
+        If any agent fails to provision, partial results are saved to *state* so
+        that teardown can clean up already-created agents before re-raising.
+        """
         logger.info("Provisioning %d agent(s)...", len(agents))
-        tasks = [self._provision_one_agent(agent) for agent in agents]
-        results: list[tuple[str, str]] = await asyncio.gather(*tasks)
-        id_map = dict(results)
+        coros = [self._provision_one_agent(agent) for agent in agents]
+        raw_results: list[tuple[str, str] | BaseException] = await asyncio.gather(
+            *coros, return_exceptions=True
+        )
+        id_map: dict[str, str] = {}
+        first_exc: BaseException | None = None
+        for item in raw_results:
+            if isinstance(item, BaseException):
+                if first_exc is None:
+                    first_exc = item
+            else:
+                name, agent_id = item
+                id_map[name] = agent_id
+        # Persist partial results so teardown can clean them up
+        state.created_agents = id_map
+        if first_exc is not None:
+            raise first_exc
         logger.info("All agents provisioned: %s", id_map)
         return id_map
 
@@ -216,8 +239,9 @@ class WorkflowExecutor:
             ]
             for task_spec in newly_skipped:
                 logger.warning(
-                    "Skipping task '%s': one or more dependencies failed or were skipped",
+                    "Skipping task '%s': a dependency failed or was skipped (%s)",
                     task_spec.subject,
+                    [dep for dep in task_spec.blocked_by if dep in failed_subjects or dep in skipped_subjects],
                 )
                 skipped_subjects.add(task_spec.subject)
                 pending.remove(task_spec)
@@ -238,11 +262,10 @@ class WorkflowExecutor:
                 for task_status in tasks_status:
                     subject = str(task_status.get("subject", ""))
                     status = str(task_status.get("status", ""))
-                    if subject in submitted:
-                        if status == "completed":
-                            completed_subjects.add(subject)
-                        elif status in {"failed", "error", "cancelled"}:
-                            failed_subjects.add(subject)
+                    if status == "completed" and subject in submitted:
+                        completed_subjects.add(subject)
+                    elif status in {"failed", "error", "cancelled"} and subject in submitted:
+                        failed_subjects.add(subject)
                 continue
 
             for task_spec in ready:
