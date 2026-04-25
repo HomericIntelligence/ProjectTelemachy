@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -69,6 +70,23 @@ class AgamemnonClient:
                 detail = response.text
             raise AgamemnonError(response.status_code, detail)
 
+    async def _request_with_retry(
+        self, method: str, url: str, *, max_attempts: int = 3, **kwargs: Any
+    ) -> httpx.Response:
+        """Issue an HTTP request, retrying on server errors and transient failures."""
+        last_exc: Exception | None = None
+        for attempt in range(max_attempts):
+            try:
+                resp = await self._http.request(method, url, **kwargs)
+                if resp.status_code < 500:
+                    return resp
+                last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
+            except (httpx.ConnectError, httpx.TimeoutException) as e:
+                last_exc = e
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(2**attempt)
+        raise AgamemnonError(0, f"Request failed after {max_attempts} attempts: {last_exc}")
+
     # === Agent endpoints ===
 
     async def create_agent(self, spec: AgentSpec) -> str:
@@ -88,7 +106,7 @@ class AgamemnonClient:
         if spec.model:
             payload["programArgs"] = f"--model {spec.model}"
 
-        response = await self._http.post("/v1/agents", json=payload)
+        response = await self._request_with_retry("POST", "/v1/agents", json=payload)
         self._raise_for_status(response)
         return str(_require(response.json(), "agent", "id", context="create_agent"))
 
@@ -102,28 +120,28 @@ class AgamemnonClient:
             "workingDirectory": spec.working_dir,
         }
 
-        response = await self._http.post("/v1/agents/docker", json=payload)
+        response = await self._request_with_retry("POST", "/v1/agents/docker", json=payload)
         self._raise_for_status(response)
         return str(_require(response.json(), "agent", "id", context="create_docker_agent"))
 
     async def wake_agent(self, agent_id: str) -> None:
         """Start a stopped agent."""
-        response = await self._http.post(f"/v1/agents/{agent_id}/start")
+        response = await self._request_with_retry("POST", f"/v1/agents/{agent_id}/start")
         self._raise_for_status(response)
 
     async def hibernate_agent(self, agent_id: str) -> None:
         """Stop a running agent."""
-        response = await self._http.post(f"/v1/agents/{agent_id}/stop")
+        response = await self._request_with_retry("POST", f"/v1/agents/{agent_id}/stop")
         self._raise_for_status(response)
 
     async def delete_agent(self, agent_id: str) -> None:
         """Permanently delete an agent."""
-        response = await self._http.delete(f"/v1/agents/{agent_id}")
+        response = await self._request_with_retry("DELETE", f"/v1/agents/{agent_id}")
         self._raise_for_status(response)
 
     async def list_agents(self) -> list[dict[str, object]]:
         """List all agents."""
-        response = await self._http.get("/v1/agents")
+        response = await self._request_with_retry("GET", "/v1/agents")
         self._raise_for_status(response)
         return response.json().get("agents", [])  # type: ignore[return-value]
 
@@ -131,19 +149,19 @@ class AgamemnonClient:
 
     async def create_team(self, name: str, agent_ids: list[str]) -> str:
         """Create a team, then set members. Returns the Agamemnon team id."""
-        response = await self._http.post("/v1/teams", json={"name": name})
+        response = await self._request_with_retry("POST", "/v1/teams", json={"name": name})
         self._raise_for_status(response)
         team_id = str(_require(response.json(), "team", "id", context="create_team"))
         if agent_ids:
-            r2 = await self._http.put(
-                f"/v1/teams/{team_id}", json={"agentIds": agent_ids}
+            r2 = await self._request_with_retry(
+                "PUT", f"/v1/teams/{team_id}", json={"agentIds": agent_ids}
             )
             self._raise_for_status(r2)
         return team_id
 
     async def delete_team(self, team_id: str) -> None:
         """Delete a team."""
-        response = await self._http.delete(f"/v1/teams/{team_id}")
+        response = await self._request_with_retry("DELETE", f"/v1/teams/{team_id}")
         self._raise_for_status(response)
 
     # === Task endpoints ===
@@ -161,7 +179,9 @@ class AgamemnonClient:
         if blocked_by_ids:
             payload["blockedBy"] = blocked_by_ids
 
-        response = await self._http.post(f"/v1/teams/{team_id}/tasks", json=payload)
+        response = await self._request_with_retry(
+            "POST", f"/v1/teams/{team_id}/tasks", json=payload
+        )
         self._raise_for_status(response)
         return str(_require(response.json(), "task", "id", context="create_task"))
 
@@ -179,14 +199,14 @@ class AgamemnonClient:
         if assignee_agent_id is not None:
             payload["assigneeAgentId"] = assignee_agent_id
 
-        response = await self._http.put(
-            f"/v1/teams/{team_id}/tasks/{task_id}", json=payload
+        response = await self._request_with_retry(
+            "PUT", f"/v1/teams/{team_id}/tasks/{task_id}", json=payload
         )
         self._raise_for_status(response)
         return response.json()  # type: ignore[return-value]
 
     async def get_tasks(self, team_id: str) -> list[dict[str, object]]:
         """List all tasks for a team."""
-        response = await self._http.get(f"/v1/teams/{team_id}/tasks")
+        response = await self._request_with_retry("GET", f"/v1/teams/{team_id}/tasks")
         self._raise_for_status(response)
         return _require(response.json(), "tasks", context="get_tasks")  # type: ignore[return-value]
