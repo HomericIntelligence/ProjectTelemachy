@@ -35,7 +35,27 @@ def _require(data: dict[str, Any], *keys: str, context: str = "") -> Any:
 class AgamemnonClient:
     """Async client for ProjectAgamemnon REST API endpoints used by Telemachy."""
 
-    def __init__(self, url: str, api_key: str = "", host_id: str = "hermes") -> None:
+    def __init__(
+        self,
+        url: str,
+        api_key: str = "",
+        host_id: str = "hermes",
+        require_tls: bool = False,
+        nats_url: str = "",
+    ) -> None:
+        if require_tls:
+            if not url.startswith("https://"):
+                raise AgamemnonError(
+                    0,
+                    "TLS required (REQUIRE_TLS=true) but AGAMEMNON_URL uses plain HTTP. "
+                    "Use https:// or set REQUIRE_TLS=false.",
+                )
+            if nats_url and not nats_url.startswith("tls://"):
+                raise AgamemnonError(
+                    0,
+                    "TLS required (REQUIRE_TLS=true) but NATS_URL uses plain nats://. "
+                    "Use tls:// or set REQUIRE_TLS=false.",
+                )
         self._base_url = url.rstrip("/")
         self._host_id = host_id
         headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -168,14 +188,29 @@ class AgamemnonClient:
     # === Task endpoints ===
 
     async def create_task(
-        self, team_id: str, spec: TaskSpec, blocked_by_ids: list[str] | None = None
+        self,
+        team_id: str,
+        spec: TaskSpec,
+        blocked_by_ids: list[str] | None = None,
+        assignee_agent_id: str | None = None,
     ) -> str:
-        """Create a task within a team. Returns the Agamemnon task id."""
+        """Create a task within a team. Returns the Agamemnon task id.
+
+        Args:
+            team_id: The Agamemnon team ID.
+            spec: The task specification.
+            blocked_by_ids: Optional list of Agamemnon task IDs this task is blocked by.
+            assignee_agent_id: Resolved Agamemnon agent ID to assign the task to.
+                If provided, takes precedence over spec.assign_to (which is a name).
+        """
         payload: dict[str, object] = {
             "subject": spec.subject,
             "description": spec.description,
         }
-        if spec.assign_to:
+        if assignee_agent_id is not None:
+            payload["assigneeAgentId"] = assignee_agent_id
+        elif spec.assign_to:
+            # Fallback: spec.assign_to should be an ID, not a name — callers must resolve
             payload["assigneeAgentId"] = spec.assign_to
         if blocked_by_ids:
             payload["blockedBy"] = blocked_by_ids
