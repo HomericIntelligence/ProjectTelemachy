@@ -60,6 +60,15 @@ class TeamSpec(BaseModel):
                 )
         return tasks
 
+    @model_validator(mode="after")
+    def validate_unique_task_subjects(self) -> "TeamSpec":
+        subjects = [t.subject for t in self.tasks]
+        seen: set[str] = set()
+        dupes = [s for s in subjects if s in seen or seen.add(s)]  # type: ignore[func-returns-value]
+        if dupes:
+            raise ValueError(f"Duplicate task subjects in team {self.name!r}: {dupes}")
+        return self
+
     def detect_dependency_cycles(self) -> None:
         """Raise ValueError if task dependencies contain a cycle."""
         task_subjects = {t.subject for t in self.tasks}
