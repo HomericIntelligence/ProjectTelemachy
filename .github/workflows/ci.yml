@@ -28,4 +28,4 @@ jobs:
         run: pixi run mypy src/telemachy --ignore-missing-imports
 
       - name: Test (pytest)
-        run: pixi run pytest --tb=short -q
+        run: pixi run pytest --tb=short -q --cov=telemachy --cov-report=term-missing
