@@ -52,10 +52,10 @@ teams:
   - name: string
     agents: [string]         # references to agent names
     tasks:
-      - title: string
+      - subject: string
         description: string
         assign_to: string    # agent name
-        depends_on: [string] # task titles
+        blocked_by: [string] # task subjects
 teardown: on_completion | on_failure | never
 ```
 
@@ -64,7 +64,7 @@ teardown: on_completion | on_failure | never
 1. **Declarative** — workflows describe desired state; Telemachy handles how to get there.
 2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
-4. **Dependency-respecting** — tasks with `depends_on` are not submitted until their predecessors complete.
+4. **Dependency-respecting** — tasks with `blocked_by` are not submitted until their predecessors complete.
 5. **Observable** — all state transitions are logged; NATS events drive completion detection.
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
