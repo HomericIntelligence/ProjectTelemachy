@@ -59,14 +59,14 @@ teams:
       - researcher
       - coder
     tasks:
-      - title: "Research the domain"
+      - subject: "Research the domain"
         description: "Investigate the problem space and summarize findings."
         assign_to: researcher
 
-      - title: "Implement solution"
+      - subject: "Implement solution"
         description: "Based on research findings, implement the solution."
         assign_to: coder
-        depends_on:
+        blocked_by:
           - "Research the domain"
 
 teardown: on_completion   # on_completion | on_failure | never
