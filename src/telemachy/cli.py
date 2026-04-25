@@ -13,6 +13,7 @@ import typer
 import yaml
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from telemachy.agamemnon_client import AgamemnonClient
@@ -135,8 +136,12 @@ def run(
 
     console.print(f"[bold green]Running workflow:[/bold green] {spec.name}")
 
+    # Count total tasks across all teams for the progress display
+    total_tasks = sum(len(team.tasks) for team in spec.teams)
+
     async def _run_with_signals() -> None:
         stop_event = asyncio.Event()
+        completed_count = 0
 
         def _handle_signal(sig: int, _frame: object) -> None:
             logger.warning("Received signal %s, initiating graceful shutdown...", sig)
@@ -145,15 +150,41 @@ def run(
         signal.signal(signal.SIGINT, _handle_signal)
         signal.signal(signal.SIGTERM, _handle_signal)
 
-        async with AgamemnonClient(
-            url=settings.agamemnon_url,
-            api_key=settings.agamemnon_api_key,
-            host_id=settings.host_id,
-            require_tls=settings.require_tls,
-            nats_url=settings.nats_url,
-        ) as client:
-            executor = WorkflowExecutor(client, stop_event=stop_event)
-            result = await executor.execute(spec)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task_id = progress.add_task(
+                f"Running workflow: {spec.name}  [Completed: 0/{total_tasks}]",
+                total=None,
+            )
+
+            def _on_task_complete(**kwargs: object) -> None:
+                nonlocal completed_count
+                completed_count += 1
+                task_info = kwargs.get("task", {})
+                subject = task_info.get("subject", "?") if isinstance(task_info, dict) else "?"  # type: ignore[union-attr]
+                progress.update(
+                    task_id,
+                    description=(
+                        f"Running workflow: {spec.name}  "
+                        f"[Completed: {completed_count}/{total_tasks}]  "
+                        f"last: {subject}"
+                    ),
+                )
+
+            async with AgamemnonClient(
+                url=settings.agamemnon_url,
+                api_key=settings.agamemnon_api_key,
+                host_id=settings.host_id,
+                require_tls=settings.require_tls,
+                nats_url=settings.nats_url,
+            ) as client:
+                executor = WorkflowExecutor(client, stop_event=stop_event)
+                executor.add_hook("on_task_complete", _on_task_complete)
+                result = await executor.execute(spec)
 
         if result.status == "completed":
             console.print(f"[bold green]Workflow completed.[/bold green] id={result.workflow_id}")
