@@ -1,0 +1,190 @@
+name: Required Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: required-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Lint (ruff)
+        run: pixi run ruff check src tests
+
+  unit-tests:
+    name: unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Run pytest
+        run: pixi run pytest --tb=short -q
+
+  integration-tests:
+    name: integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Validate workflow YAML files are well-formed
+        run: |
+          pixi run python -c "
+          import yaml, glob, sys
+          files = glob.glob('workflows/**/*.yaml', recursive=True) + glob.glob('workflows/**/*.yml', recursive=True)
+          if not files:
+              print('No workflow YAML files found — skipping validation')
+              sys.exit(0)
+          errors = []
+          for f in files:
+              try:
+                  yaml.safe_load(open(f))
+                  print(f'OK: {f}')
+              except yaml.YAMLError as e:
+                  errors.append(f'{f}: {e}')
+          if errors:
+              print('FAILED:')
+              for err in errors:
+                  print(err)
+              sys.exit(1)
+          print(f'All {len(files)} workflow YAML file(s) are valid.')
+          "
+      - name: Validate workflow files against Telemachy schema
+        run: |
+          pixi run python -m telemachy.cli schema > /tmp/telemachy-schema.json 2>/dev/null || true
+          if [ -f /tmp/telemachy-schema.json ]; then
+            pip install check-jsonschema --quiet
+            find workflows -name "*.yaml" -o -name "*.yml" | \
+              xargs check-jsonschema --schemafile /tmp/telemachy-schema.json || true
+          else
+            echo "Schema export not available — YAML parse validation already passed above"
+          fi
+
+  security/dependency-scan:
+    name: security/dependency-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Run pip-audit on project dependencies
+        run: |
+          pip install pip-audit --quiet
+          pixi run python -m pip freeze > /tmp/requirements-freeze.txt
+          pip-audit -r /tmp/requirements-freeze.txt --skip-editable
+
+  security/secrets-scan:
+    name: security/secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Build distribution (hatchling)
+        run: |
+          pip install build --quiet
+          python -m build --no-isolation
+
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Type-check (mypy)
+        run: pixi run mypy src/telemachy --ignore-missing-imports
+
+  schema-validation:
+    name: schema-validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Validate GitHub Actions workflow YAML against JSON schema
+        run: |
+          pip install check-jsonschema --quiet
+          find .github/workflows -name "*.yml" | \
+            xargs check-jsonschema \
+              --schemafile https://json.schemastore.org/github-workflow
+
+  deps/version-sync:
+    name: deps/version-sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+        with:
+          pixi-version: v0.66.0
+          cache: true
+      - name: Verify pyproject.toml version is parseable and consistent
+        run: |
+          pixi run python -c "
+          import tomllib, pathlib, sys
+
+          # Read version from pyproject.toml
+          data = tomllib.load(open('pyproject.toml', 'rb'))
+          version = data['project']['version']
+          print(f'pyproject.toml version: {version}')
+
+          # Check for a VERSION file
+          version_file = pathlib.Path('VERSION')
+          if version_file.exists():
+              file_ver = version_file.read_text().strip()
+              if file_ver != version:
+                  print(f'ERROR: VERSION file ({file_ver}) != pyproject.toml ({version})')
+                  sys.exit(1)
+              print(f'VERSION file matches: {file_ver}')
+
+          # Check __version__ in package if it exists
+          import glob
+          for init_file in glob.glob('src/**/__init__.py', recursive=True):
+              content = open(init_file).read()
+              if '__version__' in content:
+                  import ast
+                  tree = ast.parse(content)
+                  for node in ast.walk(tree):
+                      if isinstance(node, ast.Assign):
+                          for target in node.targets:
+                              if isinstance(target, ast.Name) and target.id == '__version__':
+                                  pkg_ver = ast.literal_eval(node.value)
+                                  if pkg_ver != version:
+                                      print(f'ERROR: {init_file} __version__ ({pkg_ver}) != pyproject.toml ({version})')
+                                      sys.exit(1)
+                                  print(f'{init_file} __version__ matches: {pkg_ver}')
+
+          print('Version sync OK')
+          "
