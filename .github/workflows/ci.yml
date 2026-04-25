@@ -13,10 +13,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Install pixi
-        uses: prefix-dev/setup-pixi@v0.8.3
+        uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
         with:
           pixi-version: v0.66.0
           cache: true
