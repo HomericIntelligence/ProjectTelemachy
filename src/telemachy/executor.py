@@ -33,10 +33,12 @@ class WorkflowExecutor:
         client: AgamemnonClient,
         poll_interval: float = 5.0,
         dry_run: bool = False,
+        stop_event: asyncio.Event | None = None,
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
         self._dry_run = dry_run
+        self._stop_event = stop_event
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -227,6 +229,9 @@ class WorkflowExecutor:
             if not ready:
                 if not pending:
                     break
+                if self._stop_event and self._stop_event.is_set():
+                    logger.warning("Stop event set — aborting task submission")
+                    raise asyncio.CancelledError("Task submission cancelled by stop event")
                 # Wait for some tasks to complete before continuing
                 await asyncio.sleep(self._poll_interval)
                 tasks_status = await self._client.get_tasks(team_id)
@@ -267,6 +272,10 @@ class WorkflowExecutor:
         max_polls = settings.monitor_max_polls
 
         while True:
+            if self._stop_event and self._stop_event.is_set():
+                logger.warning("Stop event set — aborting monitoring for workflow '%s'", state.spec.name)
+                raise asyncio.CancelledError("Workflow cancelled by stop event")
+
             elapsed = time.monotonic() - start_time
             if elapsed > timeout:
                 raise WorkflowTimeoutError(
@@ -358,7 +367,11 @@ def _now() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
-async def run_workflow(spec: WorkflowSpec, dry_run: bool = False) -> WorkflowState:
+async def run_workflow(
+    spec: WorkflowSpec,
+    dry_run: bool = False,
+    stop_event: asyncio.Event | None = None,
+) -> WorkflowState:
     """Convenience function: create a client from settings and execute a workflow."""
     async with AgamemnonClient(
         url=settings.agamemnon_url,
@@ -367,5 +380,5 @@ async def run_workflow(spec: WorkflowSpec, dry_run: bool = False) -> WorkflowSta
         require_tls=settings.require_tls,
         nats_url=settings.nats_url,
     ) as client:
-        executor = WorkflowExecutor(client, dry_run=dry_run)
+        executor = WorkflowExecutor(client, dry_run=dry_run, stop_event=stop_event)
         return await executor.execute(spec)
