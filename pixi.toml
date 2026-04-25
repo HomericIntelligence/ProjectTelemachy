@@ -18,7 +18,7 @@ rich              = ">=13.0"
 typer             = ">=0.12"
 
 [tasks]
-run    = "just run"
+run    = "bash -c 'just run \"$@\"' --"
 test   = "just test"
 lint   = "just lint"
 format = "just format"
