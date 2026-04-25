@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from pathlib import Path
 from typing import Annotated
@@ -24,6 +25,18 @@ app = typer.Typer(
 )
 console = Console()
 err_console = Console(stderr=True)
+
+logger = logging.getLogger(__name__)
+
+
+def _setup_logging() -> None:
+    """Configure logging from settings (LOG_LEVEL env var, default INFO)."""
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
+    )
 
 _SHELL_METACHARACTERS: re.Pattern[str] = re.compile(r"[;&|$`><(){}\[\]!?*~\\]")
 
@@ -193,6 +206,7 @@ def cancel(
 
 
 def main() -> None:
+    _setup_logging()
     app()
 
 
