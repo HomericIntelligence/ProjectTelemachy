@@ -261,6 +261,21 @@ def cancel(
     )
 
 
+@app.command()
+def schema(
+    output: Path = typer.Option(
+        Path("schemas/workflow-v1.json"),
+        "--output", "-o",
+        help="Path to write the JSON Schema file",
+    ),
+) -> None:
+    """Export the workflow YAML JSON Schema for editor validation."""
+    from telemachy.schema import write_workflow_schema
+    output.parent.mkdir(parents=True, exist_ok=True)
+    write_workflow_schema(output)
+    typer.echo(f"Schema written to {output}")
+
+
 def main() -> None:
     _setup_logging()
     app()
