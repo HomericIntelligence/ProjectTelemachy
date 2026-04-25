@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     monitor_timeout_seconds: float = 3600.0
     monitor_max_polls: int = 7200
     log_level: str = "INFO"
+    default_workflow_timeout: float = 7200.0
 
 
 settings = Settings()
