@@ -126,6 +126,7 @@ class WorkflowSpec(BaseModel):
     agents: list[AgentSpec]
     teams: list[TeamSpec]
     teardown: Literal["on_completion", "on_failure", "never"] = "on_completion"
+    timeout_seconds: float | None = None  # workflow-level execution timeout (#56)
 
     @field_validator("apiVersion")
     @classmethod

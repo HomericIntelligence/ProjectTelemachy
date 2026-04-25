@@ -36,6 +36,16 @@ class WorkflowExecutor:
 
     async def execute(self, spec: WorkflowSpec) -> WorkflowState:
         """Run a full workflow: provision → assign tasks → monitor → teardown."""
+        timeout = spec.timeout_seconds if spec.timeout_seconds is not None else settings.default_workflow_timeout
+        try:
+            return await asyncio.wait_for(self._run(spec), timeout=timeout)
+        except asyncio.TimeoutError:
+            raise WorkflowTimeoutError(
+                f"Workflow '{spec.name}' exceeded its execution timeout of {timeout}s"
+            )
+
+    async def _run(self, spec: WorkflowSpec) -> WorkflowState:
+        """Internal execution body — wrapped by execute() with a timeout."""
         workflow_id = str(uuid.uuid4())[:8]
         state = WorkflowState(
             workflow_id=workflow_id,
