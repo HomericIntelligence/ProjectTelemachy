@@ -106,18 +106,27 @@ class WorkflowExecutor:
         teams: list[TeamSpec],
         agent_ids: dict[str, str],
     ) -> dict[str, str]:
-        """Create all teams and submit tasks respecting dependencies. Returns {team_name: team_id}."""
-        team_id_map: dict[str, str] = {}
+        """Create all teams concurrently and submit tasks respecting dependencies.
 
-        for team_spec in teams:
-            member_ids = [agent_ids[name] for name in team_spec.agents]
-            team_id = await self._client.create_team(team_spec.name, member_ids)
-            team_id_map[team_spec.name] = team_id
-            logger.info("Created team '%s' → id=%s", team_spec.name, team_id)
+        Teams are provisioned in parallel via asyncio.gather (see #55).
+        Returns {team_name: team_id}.
+        """
+        results: list[tuple[str, str]] = await asyncio.gather(
+            *[self._create_team(team_spec, agent_ids) for team_spec in teams]
+        )
+        return dict(results)
 
-            await self._submit_tasks_with_deps(team_id, team_spec, agent_ids)
-
-        return team_id_map
+    async def _create_team(
+        self,
+        team_spec: TeamSpec,
+        agent_ids: dict[str, str],
+    ) -> tuple[str, str]:
+        """Create a single team, submit its tasks, and return (team_name, team_id)."""
+        member_ids = [agent_ids[name] for name in team_spec.agents]
+        team_id = await self._client.create_team(team_spec.name, member_ids)
+        logger.info("Created team '%s' → id=%s", team_spec.name, team_id)
+        await self._submit_tasks_with_deps(team_id, team_spec, agent_ids)
+        return team_spec.name, team_id
 
     async def _submit_tasks_with_deps(
         self,
