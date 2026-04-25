@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     agamemnon_api_key: str = ""
     nats_url: str = "nats://localhost:4222"
     workflows_dir: Path = Path("workflows")
+    host_id: str = "hermes"
 
 
 settings = Settings()
