@@ -15,7 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from telemachy.config import settings
-from telemachy.executor import run_workflow
+from telemachy.executor import WorkflowExecutor, run_workflow
 from telemachy.models import WorkflowSpec
 
 app = typer.Typer(
@@ -118,14 +118,17 @@ def _print_plan(spec: WorkflowSpec) -> None:
 @app.command()
 def run(
     workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
-    dry_run: Annotated[bool, typer.Option("--dry-run", help="Print plan without executing")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run/--no-dry-run", help="Simulate execution without calling Agamemnon")] = False,
 ) -> None:
     """Execute a workflow YAML file."""
     _validate_workflow_path(workflow_path)
     spec = _load_workflow(workflow_path)
 
     if dry_run:
+        console.print(f"[bold yellow][dry-run][/bold yellow] Simulating workflow: {spec.name}")
         _print_plan(spec)
+        state = asyncio.run(run_workflow(spec, dry_run=True))
+        console.print(f"[bold yellow][dry-run][/bold yellow] Simulation complete. id={state.workflow_id}")
         return
 
     console.print(f"[bold green]Running workflow:[/bold green] {spec.name}")

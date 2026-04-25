@@ -32,9 +32,11 @@ class WorkflowExecutor:
         self,
         client: AgamemnonClient,
         poll_interval: float = 5.0,
+        dry_run: bool = False,
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
+        self._dry_run = dry_run
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -95,8 +97,11 @@ class WorkflowExecutor:
                 spec.teams, state.created_agents
             )
 
-            # Monitor until all tasks reach a terminal state
-            await self._monitor_completion(state)
+            # Monitor until all tasks reach a terminal state (skipped in dry-run)
+            if not self._dry_run:
+                await self._monitor_completion(state)
+            else:
+                logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
 
             state.status = "completed"
             state.completed_at = _now()
@@ -134,6 +139,10 @@ class WorkflowExecutor:
 
     async def _provision_one_agent(self, spec: AgentSpec) -> tuple[str, str]:
         """Create a single agent and wake it. Returns (name, agamemnon_id)."""
+        if self._dry_run:
+            dry_id = f"dry-run-agent-{spec.name}"
+            logger.info("[dry-run] Would create agent '%s' → id=%s", spec.name, dry_id)
+            return spec.name, dry_id
         agent_id = await self._client.create_agent(spec)
         logger.debug("Created agent '%s' → id=%s", spec.name, agent_id)
         await self._client.wake_agent(agent_id)
@@ -163,6 +172,17 @@ class WorkflowExecutor:
         agent_ids: dict[str, str],
     ) -> tuple[str, str]:
         """Create a single team, submit its tasks, and return (team_name, team_id)."""
+        if self._dry_run:
+            dry_id = f"dry-run-team-{team_spec.name}"
+            logger.info("[dry-run] Would create team '%s' → id=%s", team_spec.name, dry_id)
+            for task_spec in team_spec.tasks:
+                logger.info(
+                    "[dry-run] Would submit task '%s' (assign_to=%s, blocked_by=%s)",
+                    task_spec.subject,
+                    task_spec.assign_to,
+                    task_spec.blocked_by,
+                )
+            return team_spec.name, dry_id
         member_ids = [agent_ids[name] for name in team_spec.agents]
         team_id = await self._client.create_team(team_spec.name, member_ids)
         logger.info("Created team '%s' → id=%s", team_spec.name, team_id)
@@ -298,6 +318,10 @@ class WorkflowExecutor:
 
     async def _teardown(self, state: WorkflowState) -> None:
         """Delete agents and teams based on the workflow's teardown policy."""
+        if self._dry_run:
+            logger.info("[dry-run] Skipping teardown")
+            return
+
         policy = state.spec.teardown
 
         should_teardown = (
@@ -334,7 +358,7 @@ def _now() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
-async def run_workflow(spec: WorkflowSpec) -> WorkflowState:
+async def run_workflow(spec: WorkflowSpec, dry_run: bool = False) -> WorkflowState:
     """Convenience function: create a client from settings and execute a workflow."""
     async with AgamemnonClient(
         url=settings.agamemnon_url,
@@ -343,5 +367,5 @@ async def run_workflow(spec: WorkflowSpec) -> WorkflowState:
         require_tls=settings.require_tls,
         nats_url=settings.nats_url,
     ) as client:
-        executor = WorkflowExecutor(client)
+        executor = WorkflowExecutor(client, dry_run=dry_run)
         return await executor.execute(spec)
