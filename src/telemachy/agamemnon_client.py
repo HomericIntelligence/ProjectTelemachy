@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from telemachy.models import AgentSpec, TaskSpec
@@ -13,6 +15,20 @@ class AgamemnonError(Exception):
     def __init__(self, status_code: int, message: str) -> None:
         self.status_code = status_code
         super().__init__(f"Agamemnon API error {status_code}: {message}")
+
+
+def _require(data: dict[str, Any], *keys: str, context: str = "") -> Any:
+    """Safely traverse nested dict keys, raising AgamemnonError on missing keys."""
+    val: Any = data
+    for k in keys:
+        if not isinstance(val, dict) or k not in val:
+            ctx = f" in {context}" if context else ""
+            raise AgamemnonError(
+                0,
+                f"Unexpected API response shape{ctx}: missing key {k!r}. Got: {val!r}",
+            )
+        val = val[k]
+    return val
 
 
 class AgamemnonClient:
@@ -74,8 +90,7 @@ class AgamemnonClient:
 
         response = await self._http.post("/v1/agents", json=payload)
         self._raise_for_status(response)
-        data = response.json()
-        return str(data.get("agent", data)["id"])
+        return str(_require(response.json(), "agent", "id", context="create_agent"))
 
     async def _create_docker_agent(self, spec: AgentSpec) -> str:
         payload: dict[str, object] = {
@@ -89,8 +104,7 @@ class AgamemnonClient:
 
         response = await self._http.post("/v1/agents/docker", json=payload)
         self._raise_for_status(response)
-        data = response.json()
-        return str(data.get("agent", data)["id"])
+        return str(_require(response.json(), "agent", "id", context="create_docker_agent"))
 
     async def wake_agent(self, agent_id: str) -> None:
         """Start a stopped agent."""
@@ -119,7 +133,7 @@ class AgamemnonClient:
         """Create a team, then set members. Returns the Agamemnon team id."""
         response = await self._http.post("/v1/teams", json={"name": name})
         self._raise_for_status(response)
-        team_id = str(response.json()["team"]["id"])
+        team_id = str(_require(response.json(), "team", "id", context="create_team"))
         if agent_ids:
             r2 = await self._http.put(
                 f"/v1/teams/{team_id}", json={"agentIds": agent_ids}
@@ -149,7 +163,7 @@ class AgamemnonClient:
 
         response = await self._http.post(f"/v1/teams/{team_id}/tasks", json=payload)
         self._raise_for_status(response)
-        return str(response.json()["task"]["id"])
+        return str(_require(response.json(), "task", "id", context="create_task"))
 
     async def update_task(
         self,
@@ -175,4 +189,4 @@ class AgamemnonClient:
         """List all tasks for a team."""
         response = await self._http.get(f"/v1/teams/{team_id}/tasks")
         self._raise_for_status(response)
-        return response.json()["tasks"]  # type: ignore[return-value]
+        return _require(response.json(), "tasks", context="get_tasks")  # type: ignore[return-value]
