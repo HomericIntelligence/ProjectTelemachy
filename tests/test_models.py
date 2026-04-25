@@ -104,7 +104,7 @@ class TestWorkflowSpecParsing:
     def test_unknown_assign_to_raises(self) -> None:
         raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
         raw["teams"][0]["tasks"][0]["assign_to"] = "ghost"
-        with pytest.raises(Exception, match="unknown agent"):
+        with pytest.raises(Exception, match="not in team"):
             WorkflowSpec.model_validate(raw)
 
     def test_teardown_default_is_on_completion(self) -> None:
