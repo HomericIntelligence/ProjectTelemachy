@@ -107,6 +107,13 @@ class WorkflowSpec(BaseModel):
     teams: list[TeamSpec]
     teardown: Literal["on_completion", "on_failure", "never"] = "on_completion"
 
+    @field_validator("apiVersion")
+    @classmethod
+    def validate_api_version(cls, v: str) -> str:
+        if v not in {"telemachy/v1"}:
+            raise ValueError(f"Unknown apiVersion {v!r}. Expected 'telemachy/v1'.")
+        return v
+
     @model_validator(mode="after")
     def validate_references(self) -> "WorkflowSpec":
         agent_names = {a.name for a in self.agents}
