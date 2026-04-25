@@ -14,7 +14,8 @@ from telemachy.models import AgentSpec, TeamSpec, WorkflowSpec, WorkflowState
 logger = logging.getLogger(__name__)
 
 # Terminal task statuses reported by ProjectAgamemnon
-_DONE_STATUSES = {"completed", "backlog", "failed", "error", "cancelled"}
+# NOTE: "backlog" is an initial/queued state, NOT a terminal state — do not include it here.
+_DONE_STATUSES = {"completed", "failed", "error", "cancelled"}
 
 
 class WorkflowExecutor:
