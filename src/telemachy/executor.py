@@ -125,25 +125,49 @@ class WorkflowExecutor:
         team_spec: TeamSpec,
         agent_ids: dict[str, str],
     ) -> None:
-        """Submit tasks in dependency order, waiting for predecessors to finish."""
+        """Submit tasks in dependency order, waiting for predecessors to finish.
+
+        If a dependency has failed/errored/cancelled, the dependent task is skipped
+        rather than waiting forever (prevents infinite loop — see #13).
+        """
         submitted: dict[str, str] = {}   # subject → task_id
         completed_subjects: set[str] = set()
+        failed_subjects: set[str] = set()
+        skipped_subjects: set[str] = set()
         pending = list(team_spec.tasks)
 
         while pending:
+            # Skip tasks whose dependencies have failed
+            newly_skipped = [
+                t for t in pending
+                if any(dep in failed_subjects or dep in skipped_subjects for dep in t.blocked_by)
+            ]
+            for task_spec in newly_skipped:
+                logger.warning(
+                    "Skipping task '%s': one or more dependencies failed or were skipped",
+                    task_spec.subject,
+                )
+                skipped_subjects.add(task_spec.subject)
+                pending.remove(task_spec)
+
             ready = [
                 t for t in pending
                 if all(dep in completed_subjects for dep in t.blocked_by)
             ]
             if not ready:
+                if not pending:
+                    break
                 # Wait for some tasks to complete before continuing
                 await asyncio.sleep(self._poll_interval)
                 tasks_status = await self._client.get_tasks(team_id)
                 for task_status in tasks_status:
                     subject = str(task_status.get("subject", ""))
                     status = str(task_status.get("status", ""))
-                    if status == "completed" and subject in submitted:
-                        completed_subjects.add(subject)
+                    if subject in submitted:
+                        if status == "completed":
+                            completed_subjects.add(subject)
+                        elif status in {"failed", "error", "cancelled"}:
+                            failed_subjects.add(subject)
                 continue
 
             for task_spec in ready:
