@@ -154,7 +154,12 @@ class TestTaskCreation:
         """Task with blocked_by must not be submitted before its dependency completes."""
         call_order: list[str] = []
 
-        async def fake_create_task(team_id: str, spec: TaskSpec, blocked_by_ids: list[str] | None = None) -> str:
+        async def fake_create_task(
+            team_id: str,
+            spec: TaskSpec,
+            blocked_by_ids: list[str] | None = None,
+            assignee_agent_id: str | None = None,
+        ) -> str:
             call_order.append(spec.subject)
             return f"task-{len(call_order)}"
 
