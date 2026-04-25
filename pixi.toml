@@ -26,9 +26,11 @@ format = "just format"
 [feature.dev.pypi-dependencies]
 pytest          = ">=8.0"
 pytest-asyncio  = ">=0.23"
+pytest-cov      = ">=5.0"
 ruff            = ">=0.4"
 mypy            = ">=1.10"
 types-PyYAML    = ">=6.0"
+yamllint        = ">=1.26"
 
 [environments]
 default = { features = ["dev"], solve-group = "default" }

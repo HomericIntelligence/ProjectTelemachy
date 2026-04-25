@@ -24,6 +24,9 @@ jobs:
       - name: Lint (ruff)
         run: pixi run ruff check src tests
 
+      - name: Lint YAML files
+        run: pixi run yamllint .
+
       - name: Type-check (mypy)
         run: pixi run mypy src/telemachy --ignore-missing-imports
 
