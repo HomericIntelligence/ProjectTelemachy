@@ -6,7 +6,9 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import Any
 
 from telemachy.config import settings
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
@@ -33,6 +35,33 @@ class WorkflowExecutor:
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
+        self._hooks: dict[str, list[Callable[..., Any]]] = {
+            "on_task_complete": [],
+            "on_task_failed": [],
+            "on_workflow_complete": [],
+            "on_workflow_failed": [],
+        }
+
+    def add_hook(self, event: str, callback: Callable[..., Any]) -> None:
+        """Register a callback for a workflow execution event.
+
+        Supported events: on_task_complete, on_task_failed,
+        on_workflow_complete, on_workflow_failed.
+        """
+        if event not in self._hooks:
+            raise ValueError(
+                f"Unknown hook event {event!r}. "
+                f"Valid events: {sorted(self._hooks)}"
+            )
+        self._hooks[event].append(callback)
+
+    async def _emit(self, event: str, **kwargs: Any) -> None:
+        """Fire all callbacks registered for *event*."""
+        for cb in self._hooks.get(event, []):
+            if asyncio.iscoroutinefunction(cb):
+                await cb(**kwargs)
+            else:
+                cb(**kwargs)
 
     async def execute(self, spec: WorkflowSpec) -> WorkflowState:
         """Run a full workflow: provision → assign tasks → monitor → teardown."""
@@ -72,6 +101,7 @@ class WorkflowExecutor:
             state.status = "completed"
             state.completed_at = _now()
             logger.info("Workflow '%s' completed successfully", spec.name)
+            await self._emit("on_workflow_complete", state=state)
 
         except asyncio.CancelledError:
             state.status = "cancelled"
@@ -84,6 +114,7 @@ class WorkflowExecutor:
             state.completed_at = _now()
             state.error = str(exc)
             logger.error("Workflow '%s' failed: %s", spec.name, exc)
+            await self._emit("on_workflow_failed", state=state, error=exc)
 
         finally:
             await self._teardown(state)
@@ -230,20 +261,30 @@ class WorkflowExecutor:
 
             all_done = True
             any_failed = False
+            # Track which tasks already emitted events to avoid duplicate callbacks
+            emitted_done: set[str] = getattr(self, "_emitted_task_events", set())
+            self._emitted_task_events: set[str] = emitted_done  # type: ignore[attr-defined]
 
             for team_name, team_id in state.created_teams.items():
                 tasks = await self._client.get_tasks(team_id)
                 for task in tasks:
                     status = str(task.get("status", ""))
+                    task_subject = str(task.get("subject", ""))
                     if status not in _DONE_STATUSES:
                         all_done = False
                     if status in {"failed", "error"}:
                         any_failed = True
                         logger.warning(
                             "Task '%s' in team '%s' failed",
-                            task.get("subject"),
+                            task_subject,
                             team_name,
                         )
+                        if task_subject not in emitted_done:
+                            emitted_done.add(task_subject)
+                            await self._emit("on_task_failed", task=task, team=team_name)
+                    elif status == "completed" and task_subject not in emitted_done:
+                        emitted_done.add(task_subject)
+                        await self._emit("on_task_complete", task=task, team=team_name)
 
             if all_done:
                 if any_failed:
