@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class AgentSpec(BaseModel):
     """Specification for a single Agamemnon agent to provision."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     program: str = "claude-code"
@@ -31,6 +33,8 @@ class AgentSpec(BaseModel):
 class TaskSpec(BaseModel):
     """Specification for a single task within a team."""
 
+    model_config = ConfigDict(extra="forbid")
+
     subject: str
     description: str
     assign_to: str  # agent name
@@ -39,6 +43,8 @@ class TaskSpec(BaseModel):
 
 class TeamSpec(BaseModel):
     """Specification for a team of agents and their tasks."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str
     agents: list[str]  # agent names — must match names in WorkflowSpec.agents
@@ -92,6 +98,8 @@ class TeamSpec(BaseModel):
 
 class WorkflowSpec(BaseModel):
     """Top-level workflow specification parsed from a workflow YAML file."""
+
+    model_config = ConfigDict(extra="forbid")
 
     apiVersion: str = "telemachy/v1"
     metadata: dict[str, str]
