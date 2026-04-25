@@ -52,3 +52,8 @@ lint:
 # Format code with ruff
 format:
     pixi run ruff format src tests
+
+# Install dev dependencies and set up pre-commit hooks
+bootstrap:
+    pixi install
+    pixi run pre-commit install
