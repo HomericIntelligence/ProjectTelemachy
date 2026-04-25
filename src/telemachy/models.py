@@ -115,6 +115,12 @@ class WorkflowSpec(BaseModel):
         return v
 
     @model_validator(mode="after")
+    def validate_metadata_name(self) -> "WorkflowSpec":
+        if "name" not in self.metadata or not self.metadata["name"]:
+            raise ValueError("workflow metadata must contain a non-empty 'name' key")
+        return self
+
+    @model_validator(mode="after")
     def validate_references(self) -> "WorkflowSpec":
         agent_names = {a.name for a in self.agents}
 
