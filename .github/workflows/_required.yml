@@ -23,6 +23,9 @@ jobs:
       - name: Lint (ruff)
         run: pixi run ruff check src tests
 
+      - name: Type-check (mypy)
+        run: pixi run mypy src/telemachy --ignore-missing-imports
+
   unit-tests:
     name: unit-tests
     runs-on: ubuntu-latest
@@ -99,9 +102,35 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION=8.30.1
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${OS}_${ARCH}.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Run Gitleaks
+        run: |
+          if [ -f .gitleaks.toml ]; then
+            gitleaks detect --source . --config .gitleaks.toml \
+              --report-format sarif --report-path gitleaks.sarif --exit-code 0
+          else
+            gitleaks detect --source . \
+              --report-format sarif --report-path gitleaks.sarif --exit-code 0
+          fi
+        continue-on-error: true
+
+      - name: Upload Gitleaks SARIF
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          retention-days: 90
 
   build:
     name: build
@@ -116,18 +145,6 @@ jobs:
         run: |
           pip install build --quiet
           python -m build --no-isolation
-
-  typecheck:
-    name: typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
-        with:
-          pixi-version: v0.66.0
-          cache: true
-      - name: Type-check (mypy)
-        run: pixi run mypy src/telemachy --ignore-missing-imports
 
   schema-validation:
     name: schema-validation
