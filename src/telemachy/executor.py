@@ -144,13 +144,33 @@ class WorkflowExecutor:
     # === Provisioning ===
 
     async def _provision_agents(self, agents: list[AgentSpec]) -> dict[str, str]:
-        """Create all agents concurrently. Returns {agent_name: agamemnon_id}."""
-        logger.info("Provisioning %d agent(s)...", len(agents))
+        """Create all agents concurrently. Returns {agent_name: agamemnon_id}.
+        
+        On partial failure, successfully created agents are cleaned up.
+        """
+        log(logging.INFO, "Provisioning %d agent(s)...", len(agents))
         tasks = [self._provision_one_agent(agent) for agent in agents]
-        results: list[tuple[str, str]] = await asyncio.gather(*tasks)
-        id_map = dict(results)
-        logger.info("All agents provisioned: %s", id_map)
-        return id_map
+        try:
+            results: list[tuple[str, str]] = await asyncio.gather(*tasks, return_exceptions=True)
+            # Check for any failures
+            failures = [(agents[i].name, exc) for i, exc in enumerate(results) if isinstance(exc, Exception)]
+            if failures:
+                # Clean up any successfully created agents
+                successful = {name: agent_id for name, agent_id in results if not isinstance(agent_id, Exception)}
+                if successful:
+                    log(logging.WARNING, "Agent provisioning failed, cleaning up %d successful agents...", len(successful))
+                    for name, agent_id in successful.items():
+                        try:
+                            await self._client.terminate_agent(agent_id)
+                        except Exception as e:
+                            log(logging.ERROR, "Failed to clean up agent %s: %s", name, e)
+                raise failures[0][1]  # Raise the first failure
+            id_map = dict(results)
+            log(logging.INFO, "All agents provisioned: %s", id_map)
+            return id_map
+        except Exception as e:
+            log(logging.ERROR, "Agent provisioning failed: %s", e)
+            raise
 
     async def _provision_one_agent(self, spec: AgentSpec) -> tuple[str, str]:
         """Create a single agent and wake it. Returns (name, agamemnon_id)."""
