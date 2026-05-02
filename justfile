@@ -53,6 +53,17 @@ test:
 lint:
     pixi run ruff check src tests
 
+# Run mypy type checking
+typecheck:
+    pixi run mypy src/telemachy --ignore-missing-imports
+
+# Run all local checks (lint + typecheck + format + test)
+check:
+    pixi run ruff check src tests && \
+    pixi run mypy src/telemachy --ignore-missing-imports && \
+    pixi run ruff format --check src tests && \
+    pixi run pytest
+
 # Format code with ruff
 format:
     pixi run ruff format src tests

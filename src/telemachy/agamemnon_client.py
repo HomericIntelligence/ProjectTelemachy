@@ -210,8 +210,14 @@ class AgamemnonClient:
         if assignee_agent_id is not None:
             payload["assigneeAgentId"] = assignee_agent_id
         elif spec.assign_to:
-            # Fallback: spec.assign_to should be an ID, not a name — callers must resolve
-            payload["assigneeAgentId"] = spec.assign_to
+            # Note: assign_to is an agent name, not an ID. Callers must resolve
+            # the name to an ID before calling create_task if assignment is needed.
+            # This fallback is kept for API compatibility but should not be relied upon.
+            logger.warning(
+                "Task '%s' has assign_to='%s' (name) but no agent ID resolved. "
+                "Agamemnon may reject this. Resolve name→ID before calling create_task.",
+                spec.subject, spec.assign_to
+            )
         if blocked_by_ids:
             payload["blockedBy"] = blocked_by_ids
 
