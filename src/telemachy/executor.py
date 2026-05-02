@@ -147,9 +147,17 @@ class WorkflowExecutor:
         """Create all agents concurrently. Returns {agent_name: agamemnon_id}.
         
         On partial failure, successfully created agents are cleaned up.
+        Rate limited to 5 concurrent agent creations to prevent API bursts.
         """
         log(logging.INFO, "Provisioning %d agent(s)...", len(agents))
-        tasks = [self._provision_one_agent(agent) for agent in agents]
+        # Limit concurrent agent creation to prevent API bursts
+        semaphore = asyncio.Semaphore(5)
+        
+        async def provision_with_limit(agent: AgentSpec) -> tuple[str, str]:
+            async with semaphore:
+                return await self._provision_one_agent(agent)
+        
+        tasks = [provision_with_limit(agent) for agent in agents]
         try:
             results: list[tuple[str, str]] = await asyncio.gather(*tasks, return_exceptions=True)
             # Check for any failures
