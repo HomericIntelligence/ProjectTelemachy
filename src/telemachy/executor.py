@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 _DONE_STATUSES = {"completed", "failed", "error", "cancelled"}
 
 
+def _log_with_workflow(logger: logging.Logger, level: int, workflow_id: str, msg: str, *args) -> None:
+    """Log a message with workflow ID prefix for correlation."""
+    prefix = f"[workflow:{workflow_id}]" if workflow_id else ""
+    logger.log(level, f"{prefix} {msg}".strip(), *args)
+
+
 class WorkflowTimeoutError(Exception):
     """Raised when workflow monitoring exceeds the configured timeout or max poll count."""
 
@@ -95,6 +101,8 @@ class WorkflowExecutor:
 
         try:
             state.status = "running"
+            # Use workflow_id for all subsequent log messages
+            log = lambda level, msg, *args: _log_with_workflow(logger, level, workflow_id, msg, *args)
 
             # Provision all agents concurrently
             state.created_agents = await self._provision_agents(spec.agents)
@@ -108,24 +116,24 @@ class WorkflowExecutor:
             if not self._dry_run:
                 await self._monitor_completion(state)
             else:
-                logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
+                log(logging.INFO, "[dry-run] Skipping monitoring — no real tasks submitted")
 
             state.status = "completed"
             state.completed_at = _now()
-            logger.info("Workflow '%s' completed successfully", spec.name)
+            log(logging.INFO, "Workflow '%s' completed successfully", spec.name)
             await self._emit("on_workflow_complete", state=state)
 
         except asyncio.CancelledError:
             state.status = "cancelled"
             state.completed_at = _now()
-            logger.warning("Workflow '%s' was cancelled", spec.name)
+            log(logging.WARNING, "Workflow '%s' was cancelled", spec.name)
             raise
 
         except Exception as exc:
             state.status = "failed"
             state.completed_at = _now()
             state.error = str(exc)
-            logger.error("Workflow '%s' failed: %s", spec.name, exc)
+            log(logging.ERROR, "Workflow '%s' failed: %s", spec.name, exc)
             await self._emit("on_workflow_failed", state=state, error=exc)
 
         finally:
