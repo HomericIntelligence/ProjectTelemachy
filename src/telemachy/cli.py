@@ -165,7 +165,10 @@ def run(
                 nonlocal completed_count
                 completed_count += 1
                 task_info = kwargs.get("task", {})
-                subject = task_info.get("subject", "?") if isinstance(task_info, dict) else "?"  # type: ignore[union-attr]
+                if isinstance(task_info, dict):
+                    subject = str(task_info.get("subject", "?"))
+                else:
+                    subject = "?"
                 progress.update(
                     task_id,
                     description=(
@@ -175,16 +178,8 @@ def run(
                     ),
                 )
 
-            async with AgamemnonClient(
-                url=settings.agamemnon_url,
-                api_key=settings.agamemnon_api_key,
-                host_id=settings.host_id,
-                require_tls=settings.require_tls,
-                nats_url=settings.nats_url,
-            ) as client:
-                executor = WorkflowExecutor(client, stop_event=stop_event)
-                executor.add_hook("on_task_complete", _on_task_complete)
-                result = await executor.execute(spec)
+            # Use run_workflow() convenience function with hook (DRY)
+            result = await run_workflow(spec, stop_event=stop_event, on_task_complete=_on_task_complete)
 
         if result.status == "completed":
             console.print(f"[bold green]Workflow completed.[/bold green] id={result.workflow_id}")

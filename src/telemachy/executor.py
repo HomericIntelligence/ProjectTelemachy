@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
+from typing import Any
 from datetime import datetime, timezone
 from typing import Any
 
@@ -39,6 +40,7 @@ class WorkflowExecutor:
         self._poll_interval = poll_interval
         self._dry_run = dry_run
         self._stop_event = stop_event
+        self._emitted_task_events: set[str] = set()  # Reset per workflow run in _run()
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -87,6 +89,9 @@ class WorkflowExecutor:
             started_at=_now(),
         )
         logger.info("Starting workflow '%s' (id=%s)", spec.name, workflow_id)
+        
+        # Reset task event tracking for this workflow run (prevents state leak on reuse)
+        self._emitted_task_events = set()
 
         try:
             state.status = "running"
@@ -291,8 +296,7 @@ class WorkflowExecutor:
             all_done = True
             any_failed = False
             # Track which tasks already emitted events to avoid duplicate callbacks
-            emitted_done: set[str] = getattr(self, "_emitted_task_events", set())
-            self._emitted_task_events: set[str] = emitted_done  # type: ignore[attr-defined]
+            emitted_done: set[str] = self._emitted_task_events
 
             for team_name, team_id in state.created_teams.items():
                 tasks = await self._client.get_tasks(team_id)
@@ -371,8 +375,16 @@ async def run_workflow(
     spec: WorkflowSpec,
     dry_run: bool = False,
     stop_event: asyncio.Event | None = None,
+    on_task_complete: Callable[[dict[str, Any]], None] | None = None,
 ) -> WorkflowState:
-    """Convenience function: create a client from settings and execute a workflow."""
+    """Convenience function: create a client from settings and execute a workflow.
+    
+    Args:
+        spec: Workflow specification
+        dry_run: If True, don't actually execute tasks
+        stop_event: Event to signal for graceful shutdown
+        on_task_complete: Optional callback invoked when a task completes
+    """
     async with AgamemnonClient(
         url=settings.agamemnon_url,
         api_key=settings.agamemnon_api_key,
@@ -381,4 +393,6 @@ async def run_workflow(
         nats_url=settings.nats_url,
     ) as client:
         executor = WorkflowExecutor(client, dry_run=dry_run, stop_event=stop_event)
+        if on_task_complete is not None:
+            executor.add_hook("on_task_complete", on_task_complete)
         return await executor.execute(spec)
