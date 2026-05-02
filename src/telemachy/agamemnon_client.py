@@ -99,9 +99,26 @@ class AgamemnonClient:
         for attempt in range(max_attempts):
             try:
                 resp = await self._http.request(method, url, **kwargs)
-                if resp.status_code < 500:
+                if resp.status_code < 500 and resp.status_code != 429:
                     return resp
-                last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
+                # Handle 429 (Too Many Requests) with retry-after or exponential backoff
+                if resp.status_code == 429:
+                    retry_after = resp.headers.get("Retry-After")
+                    if retry_after:
+                        delay = float(retry_after)
+                    else:
+                        delay = 2 ** (attempt + 2)  # Longer backoff for rate limits
+                    logger.warning(
+                        "Rate limited (429) on %s %s, retrying in %.1fs (attempt %d/%d)",
+                        method, url, delay, attempt + 1, max_attempts
+                    )
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        last_exc = AgamemnonError(429, "Rate limit exceeded")
+                else:
+                    last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
             if attempt < max_attempts - 1:
