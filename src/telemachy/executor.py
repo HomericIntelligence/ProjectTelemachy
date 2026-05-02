@@ -304,15 +304,31 @@ class WorkflowExecutor:
     # === Monitoring ===
 
     async def _monitor_completion(self, state: WorkflowState) -> None:
-        """Poll all team tasks until every task reaches a terminal status."""
-        logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
+        """Poll all team tasks until every task reaches a terminal status.
+        
+        Includes periodic health checks to detect Agamemnon unresponsiveness.
+        """
+        log(logging.INFO, "Monitoring workflow '%s' for completion...", state.spec.name)
 
         poll_count = 0
         start_time = time.monotonic()
         timeout = settings.monitor_timeout_seconds
         max_polls = settings.monitor_max_polls
+        health_check_interval = 60  # Check health every 60 seconds
+        last_health_check = time.monotonic()
 
         while True:
+            # Periodic health check to detect Agamemnon unresponsiveness
+            if time.monotonic() - last_health_check > health_check_interval:
+                if state.created_teams:
+                    try:
+                        first_team_id = next(iter(state.created_teams.values()))
+                        await self._client.get_tasks(first_team_id)
+                        last_health_check = time.monotonic()
+                    except Exception as e:
+                        log(logging.ERROR, "Agamemnon health check failed: %s", e)
+                        raise RuntimeError(f"Agamemnon connectivity lost: {e}")
+
             if self._stop_event and self._stop_event.is_set():
                 logger.warning("Stop event set — aborting monitoring for workflow '%s'", state.spec.name)
                 raise asyncio.CancelledError("Workflow cancelled by stop event")
