@@ -1,7 +1,8 @@
 """DEPRECATED: Use agamemnon_client instead.
 
 This module is kept for backward compatibility. All symbols are re-exported
-from agamemnon_client. Will be removed in a future release.
+from agamemnon_client. Will be removed in v0.3.0 (or 6 months after v0.2.0 release,
+whichever comes first).
 """
 
 from telemachy.agamemnon_client import AgamemnonClient as AgamemnonClient

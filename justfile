@@ -13,12 +13,12 @@ default:
 # Execute a workflow YAML file
 run WORKFLOW:
     AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
-        pixi run python -m telemachy.cli run {{WORKFLOW}}
+        pixi run python -m telemachy.cli run "{{WORKFLOW}}"
 
 # Dry-run: show what would be created without executing
 plan WORKFLOW:
     AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
-        pixi run python -m telemachy.cli plan {{WORKFLOW}}
+        pixi run python -m telemachy.cli plan "{{WORKFLOW}}"
 
 # Show status of a running workflow
 status WORKFLOW_ID:
@@ -37,7 +37,7 @@ cancel WORKFLOW_ID:
 
 # Validate a workflow YAML without executing
 validate WORKFLOW:
-    pixi run python -m telemachy.cli validate {{WORKFLOW}}
+    pixi run python -m telemachy.cli validate "{{WORKFLOW}}"
 
 # Export workflow JSON Schema for editor validation
 schema:
