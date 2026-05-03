@@ -6,10 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from telemachy.executor import WorkflowExecutor
 from telemachy.agamemnon_client import AgamemnonClient
+from telemachy.executor import WorkflowExecutor
 from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

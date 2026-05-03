@@ -71,13 +71,13 @@ def _load_workflow(workflow_path: Path) -> WorkflowSpec:
         raw = yaml.safe_load(workflow_path.read_text())
     except yaml.YAMLError as exc:
         err_console.print(f"[red]YAML parse error:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
     try:
         return WorkflowSpec.model_validate(raw)
     except Exception as exc:
         err_console.print(f"[red]Workflow schema error:[/red] {exc}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
 
 def _print_plan(spec: WorkflowSpec) -> None:
@@ -263,7 +263,7 @@ def cancel(
 
 @app.command()
 def schema(
-    output: Path = typer.Option(
+    output: Path = typer.Option(  # noqa: B008
         Path("schemas/workflow-v1.json"),
         "--output", "-o",
         help="Path to write the JSON Schema file",

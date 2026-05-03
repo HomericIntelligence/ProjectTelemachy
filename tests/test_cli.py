@@ -9,8 +9,6 @@ import pytest
 from typer.testing import CliRunner
 
 from telemachy.cli import app
-from telemachy.models import WorkflowSpec
-
 
 runner = CliRunner()
 

@@ -22,7 +22,7 @@ class AgentSpec(BaseModel):
     memory: str = "4g"
 
     @model_validator(mode="after")
-    def docker_requires_image(self) -> "AgentSpec":
+    def docker_requires_image(self) -> AgentSpec:
         if self.runtime == "docker" and not self.docker_image:
             raise ValueError(
                 f"Agent '{self.name}': docker_image is required when runtime is 'docker'"
@@ -61,7 +61,7 @@ class TeamSpec(BaseModel):
         return tasks
 
     @model_validator(mode="after")
-    def validate_unique_task_subjects(self) -> "TeamSpec":
+    def validate_unique_task_subjects(self) -> TeamSpec:
         subjects = [t.subject for t in self.tasks]
         seen: set[str] = set()
         dupes = [s for s in subjects if s in seen or seen.add(s)]  # type: ignore[func-returns-value]
@@ -70,7 +70,7 @@ class TeamSpec(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_task_assignments(self) -> "TeamSpec":
+    def validate_task_assignments(self) -> TeamSpec:
         for task in self.tasks:
             if task.assign_to not in self.agents:
                 raise ValueError(
@@ -96,7 +96,7 @@ class TeamSpec(BaseModel):
         # Topological sort (Kahn's algorithm) to detect cycles
         in_degree: dict[str, int] = {t: 0 for t in task_subjects}
         for subject, task_deps in deps.items():
-            for dep in task_deps:
+            for _dep in task_deps:
                 in_degree[subject] += 1
 
         queue = [t for t, d in in_degree.items() if d == 0]
@@ -136,13 +136,13 @@ class WorkflowSpec(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_metadata_name(self) -> "WorkflowSpec":
+    def validate_metadata_name(self) -> WorkflowSpec:
         if "name" not in self.metadata or not self.metadata["name"]:
             raise ValueError("workflow metadata must contain a non-empty 'name' key")
         return self
 
     @model_validator(mode="after")
-    def validate_references(self) -> "WorkflowSpec":
+    def validate_references(self) -> WorkflowSpec:
         agent_names = {a.name for a in self.agents}
 
         for team in self.teams:

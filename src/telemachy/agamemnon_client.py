@@ -64,7 +64,7 @@ class AgamemnonClient:
         self._headers = headers
         self._client: httpx.AsyncClient | None = None
 
-    async def __aenter__(self) -> "AgamemnonClient":
+    async def __aenter__(self) -> AgamemnonClient:
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             headers=self._headers,
