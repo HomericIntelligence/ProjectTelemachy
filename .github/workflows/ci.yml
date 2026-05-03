@@ -18,7 +18,7 @@ jobs:
       - name: Install pixi
         uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
 
       - name: Lint (ruff)
@@ -39,6 +39,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@34f91af371785594c0f52c91a18892c795a9e085 # v2.9.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION=8.18.1
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${OS}_${ARCH}.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Run Gitleaks
+        run: gitleaks detect --source . --exit-code 0
