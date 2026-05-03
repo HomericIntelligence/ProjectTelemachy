@@ -7,11 +7,11 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from telemachy.config import settings
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
+from telemachy.config import settings
 from telemachy.models import AgentSpec, TeamSpec, WorkflowSpec, WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -72,10 +72,10 @@ class WorkflowExecutor:
         timeout = spec.timeout_seconds if spec.timeout_seconds is not None else settings.default_workflow_timeout
         try:
             return await asyncio.wait_for(self._run(spec), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError as exc:
             raise WorkflowTimeoutError(
                 f"Workflow '{spec.name}' exceeded its execution timeout of {timeout}s"
-            )
+            ) from exc
 
     async def _run(self, spec: WorkflowSpec) -> WorkflowState:
         """Internal execution body — wrapped by execute() with a timeout."""
@@ -134,7 +134,7 @@ class WorkflowExecutor:
     async def _provision_agents(
         self,
         agents: list[AgentSpec],
-        state: "WorkflowState",
+        state: WorkflowState,
     ) -> dict[str, str]:
         """Create all agents concurrently. Returns {agent_name: agamemnon_id}.
 
@@ -387,7 +387,7 @@ class WorkflowExecutor:
 
 
 def _now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
+    return datetime.now(tz=UTC).isoformat()
 
 
 async def run_workflow(

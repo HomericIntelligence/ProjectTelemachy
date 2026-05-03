@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from telemachy.executor import WorkflowExecutor
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
+from telemachy.executor import WorkflowExecutor
 from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -329,7 +327,7 @@ class TestErrorPaths:
             executor,
             "_monitor_completion",
             new_callable=AsyncMock,
-            side_effect=asyncio.TimeoutError("monitor timed out"),
+            side_effect=TimeoutError("monitor timed out"),
         ):
             state = await executor.execute(spec)
 

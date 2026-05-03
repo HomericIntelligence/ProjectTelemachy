@@ -7,7 +7,6 @@ import yaml
 
 from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec
 
-
 MINIMAL_WORKFLOW_YAML = """
 apiVersion: telemachy/v1
 metadata:
@@ -116,7 +115,7 @@ class TestWorkflowSpecParsing:
     def test_invalid_teardown_raises(self) -> None:
         raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
         raw["teardown"] = "immediately"
-        with pytest.raises(Exception):
+        with pytest.raises(ValueError):
             WorkflowSpec.model_validate(raw)
 
 
