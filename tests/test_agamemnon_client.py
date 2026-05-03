@@ -9,7 +9,6 @@ import pytest
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
 from telemachy.models import AgentSpec
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -65,9 +64,11 @@ async def test_create_agent_raises_on_4xx() -> None:
     err_resp = _make_response(400, {"detail": "bad request"})
     err_resp.json.return_value = {"detail": "bad request"}
 
-    with patch.object(client._client, "request", new_callable=AsyncMock, return_value=err_resp):
-        with pytest.raises(AgamemnonError) as exc_info:
-            await client.create_agent(_local_agent_spec())
+    with (
+        patch.object(client._client, "request", new_callable=AsyncMock, return_value=err_resp),
+        pytest.raises(AgamemnonError) as exc_info,
+    ):
+        await client.create_agent(_local_agent_spec())
 
     assert exc_info.value.status_code == 400
 
@@ -84,9 +85,11 @@ async def test_create_agent_raises_on_malformed_response() -> None:
     # Response is 201 OK but body has unexpected shape
     bad_resp = _make_response(201, {"result": "ok"})
 
-    with patch.object(client._client, "request", new_callable=AsyncMock, return_value=bad_resp):
-        with pytest.raises(AgamemnonError) as exc_info:
-            await client.create_agent(_local_agent_spec())
+    with (
+        patch.object(client._client, "request", new_callable=AsyncMock, return_value=bad_resp),
+        pytest.raises(AgamemnonError) as exc_info,
+    ):
+        await client.create_agent(_local_agent_spec())
 
     # Error should reference the missing key
     assert "agent" in str(exc_info.value).lower() or exc_info.value.status_code == 0
@@ -106,10 +109,11 @@ async def test_create_agent_retries_on_503() -> None:
     # 503, 503, then 201
     mock_request = AsyncMock(side_effect=[fail_resp, fail_resp, ok_resp])
 
-    with patch.object(client._client, "request", mock_request):
-        # Patch asyncio.sleep so the test doesn't actually wait
-        with patch("telemachy.agamemnon_client.asyncio.sleep", new_callable=AsyncMock):
-            agent_id = await client.create_agent(_local_agent_spec())
+    with (
+        patch.object(client._client, "request", mock_request),
+        patch("telemachy.agamemnon_client.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        agent_id = await client.create_agent(_local_agent_spec())
 
     assert agent_id == "retry-id"
     assert mock_request.call_count == 3
