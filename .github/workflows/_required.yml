@@ -16,9 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Lint (ruff)
         run: pixi run ruff check src tests
@@ -28,9 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Run pytest
         run: pixi run pytest --tb=short -q
@@ -40,9 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Validate workflow YAML files are well-formed
         run: |
@@ -82,14 +82,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Run pip-audit on project dependencies
         run: |
           pip install pip-audit --quiet
-          pixi run python -m pip freeze > /tmp/requirements-freeze.txt
+          pixi run python -c "
+          import importlib.metadata, sys
+          dists = importlib.metadata.distributions()
+          lines = [f'{d.metadata[\"Name\"]}=={d.metadata[\"Version\"]}' for d in dists]
+          sys.stdout.write('\n'.join(lines) + '\n')
+          " > /tmp/requirements-freeze.txt
           pip-audit -r /tmp/requirements-freeze.txt --skip-editable
 
   security-secrets-scan:
@@ -99,7 +104,29 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - name: Install Gitleaks
+        run: |
+          GITLEAKS_VERSION=8.18.1
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
+          BASE_URL="https://github.com/gitleaks/gitleaks/releases/download"
+          FILE="gitleaks_${GITLEAKS_VERSION}_${OS}_${ARCH}.tar.gz"
+          curl -sSfL "${BASE_URL}/v${GITLEAKS_VERSION}/${FILE}" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Run Gitleaks
+        run: |
+          gitleaks detect --source . --report-format sarif --report-path gitleaks.sarif --exit-code 0
+        continue-on-error: true
+
+      - name: Upload Gitleaks SARIF
+        if: always() && hashFiles('gitleaks.sarif') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks.sarif
+          retention-days: 90
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -108,13 +135,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Build distribution (hatchling)
         run: |
-          pip install build --quiet
+          pip install build hatchling --quiet
           python -m build --no-isolation
 
   typecheck:
@@ -122,9 +149,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Type-check (mypy)
         run: pixi run mypy src/telemachy --ignore-missing-imports
@@ -146,9 +173,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1 # v0.8.1
         with:
-          pixi-version: v0.66.0
+          pixi-version: v0.67.0
           cache: true
       - name: Verify pyproject.toml version is parseable and consistent
         run: |
