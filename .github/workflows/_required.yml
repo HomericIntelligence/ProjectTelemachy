@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
@@ -82,14 +82,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
       - name: Run pip-audit on project dependencies
         run: |
           pip install pip-audit --quiet
-          pixi run python -m pip freeze > /tmp/requirements-freeze.txt
+          pixi run python -c "
+          import importlib.metadata, sys
+          dists = importlib.metadata.distributions()
+          lines = [f'{d.metadata[\"Name\"]}=={d.metadata[\"Version\"]}' for d in dists]
+          sys.stdout.write('\n'.join(lines) + '\n')
+          " > /tmp/requirements-freeze.txt
           pip-audit -r /tmp/requirements-freeze.txt --skip-editable
 
   security-secrets-scan:
@@ -117,13 +122,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
       - name: Build distribution (hatchling)
         run: |
-          pip install build --quiet
+          pip install build hatchling --quiet
           python -m build --no-isolation
 
   typecheck:
@@ -131,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
@@ -155,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
-      - uses: prefix-dev/setup-pixi@b4fa1ac3900b5ac04b5b07ec9a7a7fe9d90c5258 # v0.8.1
+      - uses: prefix-dev/setup-pixi@v0.8.1  # v0.8.1
         with:
           pixi-version: v0.67.0
           cache: true
