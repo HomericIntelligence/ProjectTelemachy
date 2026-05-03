@@ -104,8 +104,9 @@ jobs:
           GITLEAKS_VERSION=8.18.1
           OS=$(uname -s | tr '[:upper:]' '[:lower:]')
           ARCH=$(uname -m | sed 's/x86_64/x64/;s/aarch64/arm64/')
-          curl -sSfL \
-            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${OS}_${ARCH}.tar.gz" \
+          BASE_URL="https://github.com/gitleaks/gitleaks/releases/download"
+          FILE="gitleaks_${GITLEAKS_VERSION}_${OS}_${ARCH}.tar.gz"
+          curl -sSfL "${BASE_URL}/v${GITLEAKS_VERSION}/${FILE}" \
             | tar -xz -C /usr/local/bin gitleaks
           gitleaks version
 
