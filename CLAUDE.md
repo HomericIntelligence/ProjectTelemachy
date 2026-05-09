@@ -2,9 +2,13 @@
 
 ## Project Overview
 
-ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the ProjectAgamemnon REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and teams via Agamemnon, assigns tasks with dependency ordering, monitors execution via NATS events, and tears down resources according to the workflow's teardown policy.
+ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the
+ProjectAgamemnon REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and
+teams via Agamemnon, assigns tasks with dependency ordering, monitors execution via NATS events, and
+tears down resources according to the workflow's teardown policy.
 
-**This project uses ProjectAgamemnon exclusively as its execution backend.** There is no parallel agent system — all agent lifecycle management flows through Agamemnon's REST API.
+**This project uses ProjectAgamemnon exclusively as its execution backend.**
+There is no parallel agent system — all agent lifecycle management flows through Agamemnon's REST API.
 
 ## Architecture
 
