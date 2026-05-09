@@ -27,5 +27,19 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     default_workflow_timeout: float = 7200.0
 
+    def client_kwargs(self) -> dict[str, object]:
+        """Return keyword arguments for constructing an AgamemnonClient.
+
+        Both ``cli.run`` and ``executor.run_workflow`` must use this so that
+        client construction stays DRY and all settings are applied uniformly.
+        """
+        return {
+            "url": self.agamemnon_url,
+            "api_key": self.agamemnon_api_key,
+            "host_id": self.host_id,
+            "require_tls": self.require_tls,
+            "nats_url": self.nats_url,
+        }
+
 
 settings = Settings()

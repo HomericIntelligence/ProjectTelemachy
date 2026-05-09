@@ -396,12 +396,6 @@ async def run_workflow(
     stop_event: asyncio.Event | None = None,
 ) -> WorkflowState:
     """Convenience function: create a client from settings and execute a workflow."""
-    async with AgamemnonClient(
-        url=settings.agamemnon_url,
-        api_key=settings.agamemnon_api_key,
-        host_id=settings.host_id,
-        require_tls=settings.require_tls,
-        nats_url=settings.nats_url,
-    ) as client:
+    async with AgamemnonClient(**settings.client_kwargs()) as client:
         executor = WorkflowExecutor(client, dry_run=dry_run, stop_event=stop_event)
         return await executor.execute(spec)

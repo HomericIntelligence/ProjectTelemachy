@@ -175,13 +175,7 @@ def run(
                     ),
                 )
 
-            async with AgamemnonClient(
-                url=settings.agamemnon_url,
-                api_key=settings.agamemnon_api_key,
-                host_id=settings.host_id,
-                require_tls=settings.require_tls,
-                nats_url=settings.nats_url,
-            ) as client:
+            async with AgamemnonClient(**settings.client_kwargs()) as client:
                 executor = WorkflowExecutor(client, stop_event=stop_event)
                 executor.add_hook("on_task_complete", _on_task_complete)
                 result = await executor.execute(spec)
