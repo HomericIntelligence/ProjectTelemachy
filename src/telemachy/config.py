@@ -3,8 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class AgamemnonClientKwargs(TypedDict):
+    """Typed kwargs matching AgamemnonClient.__init__ parameters."""
+
+    url: str
+    api_key: str
+    host_id: str
+    require_tls: bool
+    nats_url: str
 
 
 class Settings(BaseSettings):
@@ -27,7 +38,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     default_workflow_timeout: float = 7200.0
 
-    def client_kwargs(self) -> dict[str, object]:
+    def client_kwargs(self) -> AgamemnonClientKwargs:
         """Return keyword arguments for constructing an AgamemnonClient.
 
         Both ``cli.run`` and ``executor.run_workflow`` must use this so that
