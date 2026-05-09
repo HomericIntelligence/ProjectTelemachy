@@ -128,3 +128,12 @@ just format                        # ruff format
 | `AGAMEMNON_URL` | `http://localhost:8080` | ProjectAgamemnon base URL |
 | `AGAMEMNON_API_KEY` | `` | API key (if auth enabled) |
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL for event monitoring |
+| `WORKFLOWS_DIR` | `workflows` | Directory to search for workflow YAML files |
+| `HOST_ID` | `hermes` | Host identifier embedded in Agamemnon task assignments |
+| `REQUIRE_TLS` | `false` | Reject non-TLS Agamemnon connections when `true` |
+| `LOG_LEVEL` | `INFO` | Python logging level (DEBUG, INFO, WARNING, ERROR) |
+| `MONITOR_TIMEOUT_SECONDS` | `3600` | Seconds before workflow monitor times out |
+| `MONITOR_MAX_POLLS` | `7200` | Maximum polling attempts for workflow monitor |
+| `DEFAULT_WORKFLOW_TIMEOUT` | `7200` | Per-workflow execution timeout in seconds |
+
+<!-- triage: 2026-04-24 myrmidon-swarm implementation pass complete — 17 PRs merged, all remaining issues tracked individually -->
