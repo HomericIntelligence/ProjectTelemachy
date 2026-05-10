@@ -5,7 +5,7 @@ from telemachy.config import Settings
 from telemachy.executor import WorkflowExecutor
 from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
 
-version = "0.1.0"
+__version__ = "0.1.0"
 
 __all__ = [
     "WorkflowExecutor",

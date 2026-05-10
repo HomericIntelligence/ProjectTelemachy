@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AgentSpec(BaseModel):
@@ -62,9 +62,13 @@ class TeamSpec(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_task_subjects(self) -> TeamSpec:
-        subjects = [t.subject for t in self.tasks]
         seen: set[str] = set()
-        dupes = [s for s in subjects if s in seen or seen.add(s)]  # type: ignore[func-returns-value]
+        dupes: list[str] = []
+        for task in self.tasks:
+            if task.subject in seen:
+                dupes.append(task.subject)
+            else:
+                seen.add(task.subject)
         if dupes:
             raise ValueError(f"Duplicate task subjects in team {self.name!r}: {dupes}")
         return self
@@ -178,8 +182,9 @@ class WorkflowState(BaseModel):
     workflow_id: str
     spec: WorkflowSpec
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
-    created_agents: dict[str, str] = {}  # agent name → agamemnon agent id
-    created_teams: dict[str, str] = {}   # team name → agamemnon team id
+    # Use default_factory to avoid sharing a mutable default across instances.
+    created_agents: dict[str, str] = Field(default_factory=dict)  # agent name → agamemnon agent id
+    created_teams: dict[str, str] = Field(default_factory=dict)   # team name → agamemnon team id
     started_at: str | None = None
     completed_at: str | None = None
     error: str | None = None

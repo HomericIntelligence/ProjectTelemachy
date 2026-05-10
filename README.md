@@ -32,6 +32,11 @@ just validate workflows/example.yaml
 just status <workflow-id>
 ```
 
+> **Note:** `status`, `list`, and `cancel` are currently stubs. They print a
+> placeholder message because persistent workflow-state storage is not yet
+> implemented. Until a state backend lands, query ProjectAgamemnon directly
+> for live agent and team status.
+
 ## Workflow Schema
 
 A workflow YAML has four top-level sections:

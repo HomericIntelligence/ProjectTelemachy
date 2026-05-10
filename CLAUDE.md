@@ -24,7 +24,7 @@ WorkflowExecutor
     ├── AgamemnonClient  →  POST /v1/agents/{id}/start   (start agents)
     ├── AgamemnonClient  →  POST /v1/teams               (create teams)
     ├── AgamemnonClient  →  POST /v1/teams/{id}/tasks    (create tasks)
-    ├── NATS subscriber  →  monitor task completion events
+    ├── NATS subscriber  →  monitor task completion events  (planned — not yet implemented)
     └── AgamemnonClient  →  DELETE /v1/agents/{id}       (teardown)
 ```
 
