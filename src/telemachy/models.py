@@ -62,9 +62,13 @@ class TeamSpec(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_task_subjects(self) -> TeamSpec:
-        subjects = [t.subject for t in self.tasks]
         seen: set[str] = set()
-        dupes = [s for s in subjects if s in seen or seen.add(s)]  # type: ignore[func-returns-value]
+        dupes: list[str] = []
+        for task in self.tasks:
+            if task.subject in seen:
+                dupes.append(task.subject)
+            else:
+                seen.add(task.subject)
         if dupes:
             raise ValueError(f"Duplicate task subjects in team {self.name!r}: {dupes}")
         return self
