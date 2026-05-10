@@ -124,7 +124,7 @@ just format                        # ruff format
 ## Environment Variables
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `AGAMEMNON_URL` | `http://localhost:8080` | ProjectAgamemnon base URL |
 | `AGAMEMNON_API_KEY` | `` | API key (if auth enabled) |
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL for event monitoring |
@@ -136,4 +136,5 @@ just format                        # ruff format
 | `MONITOR_MAX_POLLS` | `7200` | Maximum polling attempts for workflow monitor |
 | `DEFAULT_WORKFLOW_TIMEOUT` | `7200` | Per-workflow execution timeout in seconds |
 
-<!-- triage: 2026-04-24 myrmidon-swarm implementation pass complete — 17 PRs merged, all remaining issues tracked individually -->
+<!-- triage: 2026-04-24 myrmidon-swarm implementation pass complete -->
+<!-- 17 PRs merged, all remaining issues tracked individually -->

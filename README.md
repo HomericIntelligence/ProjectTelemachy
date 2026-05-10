@@ -79,7 +79,7 @@ teardown: on_completion   # on_completion | on_failure | never
 ### Agent Fields
 
 | Field | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `name` | required | Unique name within workflow |
 | `program` | `claude-code` | Agent program to run |
 | `model` | null | Override model (e.g. `claude-opus-4-5`) |
