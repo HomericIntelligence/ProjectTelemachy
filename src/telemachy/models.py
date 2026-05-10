@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class AgentSpec(BaseModel):
@@ -178,8 +178,9 @@ class WorkflowState(BaseModel):
     workflow_id: str
     spec: WorkflowSpec
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
-    created_agents: dict[str, str] = {}  # agent name → agamemnon agent id
-    created_teams: dict[str, str] = {}   # team name → agamemnon team id
+    # Use default_factory to avoid sharing a mutable default across instances.
+    created_agents: dict[str, str] = Field(default_factory=dict)  # agent name → agamemnon agent id
+    created_teams: dict[str, str] = Field(default_factory=dict)   # team name → agamemnon team id
     started_at: str | None = None
     completed_at: str | None = None
     error: str | None = None
