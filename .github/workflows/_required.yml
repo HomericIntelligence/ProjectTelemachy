@@ -11,6 +11,57 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  forbid-suppressions:
+    name: forbid-suppressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: "Reject silent-failure workaround in shell/YAML/Dockerfile/justfile/HCL"
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files \
+            -- \
+            '*.sh' '*.bash' '*.yml' '*.yaml' '*.hcl' \
+            'Dockerfile*' '**/Dockerfile*' \
+            'justfile' '**/justfile' 'Justfile' '**/Justfile')
+          declare -a scan_files=()
+          for f in "${files[@]}"; do
+            case "$f" in
+              # Exempt this workflow file (heredoc would otherwise self-match)
+              .github/workflows/_required.yml) continue ;;
+              # Exempt any runbook that documents the rule (if present)
+              docs/runbooks/no-silent-failures.md) continue ;;
+            esac
+            scan_files+=("$f")
+          done
+          if [ "${#scan_files[@]}" -eq 0 ]; then
+            echo "No files to scan"
+            exit 0
+          fi
+          if grep -nE '\|\|[[:space:]]*true([[:space:]]*$|[[:space:]]+#)' "${scan_files[@]}"; then
+            echo ""
+            echo '::error::Found silent-failure workarounds above. Refactor per HomericIntelligence/Odysseus#280.'
+            exit 1
+          fi
+          echo 'OK: no silent-failure workarounds found'
+
+      - name: "Reject continue-on-error workflow opt-out"
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git ls-files -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No workflow files"
+            exit 0
+          fi
+          if grep -nE '^[[:space:]]*continue-on-error:[[:space:]]*true[[:space:]]*$' "${files[@]}"; then
+            echo ""
+            echo '::error::Found "continue-on-error: true" above. Fix the root cause per HomericIntelligence/Odysseus#280.'
+            exit 1
+          fi
+          echo 'OK: no "continue-on-error: true" found'
+
   lint:
     name: lint
     runs-on: ubuntu-24.04
@@ -166,13 +217,20 @@ jobs:
           "
       - name: Validate workflow files against Telemachy schema
         run: |
-          pixi run python -m telemachy.cli schema > /tmp/telemachy-schema.json 2>/dev/null || true
-          if [ -f /tmp/telemachy-schema.json ]; then
+          set -euo pipefail
+          if pixi run python -m telemachy.cli schema > /tmp/telemachy-schema.json 2>/tmp/telemachy-schema.err; then
             pip install check-jsonschema --quiet
-            find workflows -name "*.yaml" -o -name "*.yml" | \
-              xargs check-jsonschema --schemafile /tmp/telemachy-schema.json || true
+            mapfile -t workflow_files < <(find workflows \( -name "*.yaml" -o -name "*.yml" \))
+            if [ "${#workflow_files[@]}" -eq 0 ]; then
+              echo "No workflow files to validate"
+            else
+              check-jsonschema --schemafile /tmp/telemachy-schema.json "${workflow_files[@]}"
+            fi
           else
-            echo "Schema export not available — YAML parse validation already passed above"
+            echo "::warning::Schema export failed; falling back to YAML parse validation only"
+            if [ -s /tmp/telemachy-schema.err ]; then
+              cat /tmp/telemachy-schema.err >&2
+            fi
           fi
 
   security-dependency-scan:
@@ -223,7 +281,6 @@ jobs:
             gitleaks detect --source . \
               --report-format sarif --report-path gitleaks.sarif --exit-code 0
           fi
-        continue-on-error: true
 
       - name: Upload Gitleaks SARIF
         if: always() && hashFiles('gitleaks.sarif') != ''
