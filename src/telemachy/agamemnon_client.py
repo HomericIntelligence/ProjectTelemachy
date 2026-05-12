@@ -210,8 +210,15 @@ class AgamemnonClient:
         if assignee_agent_id is not None:
             payload["assigneeAgentId"] = assignee_agent_id
         elif spec.assign_to:
-            # Fallback: spec.assign_to should be an ID, not a name — callers must resolve
-            payload["assigneeAgentId"] = spec.assign_to
+            # spec.assign_to is a workflow-author-facing agent NAME, not an
+            # Agamemnon agent ID. Silently posting it as assigneeAgentId would
+            # produce a 4xx (or worse, an orphaned task) at runtime — fail fast
+            # so the caller is forced to resolve the name first (see #198).
+            raise ValueError(
+                f"Task {spec.subject!r} has assign_to={spec.assign_to!r} but no "
+                "assignee_agent_id was supplied. Callers must resolve the agent "
+                "name to an Agamemnon agent ID before invoking create_task()."
+            )
         if blocked_by_ids:
             payload["blockedBy"] = blocked_by_ids
 
