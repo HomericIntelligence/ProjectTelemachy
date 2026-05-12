@@ -53,9 +53,16 @@ test:
 lint:
     pixi run ruff check src tests
 
+# Run mypy static type checker
+mypy:
+    pixi run mypy src/telemachy --ignore-missing-imports
+
 # Format code with ruff
 format:
     pixi run ruff format src tests
+
+# Run the full local CI suite: lint, mypy, tests
+check: lint mypy test
 
 # Install dev dependencies and set up pre-commit hooks
 bootstrap:
