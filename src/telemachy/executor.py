@@ -45,6 +45,11 @@ class WorkflowExecutor:
             "on_workflow_complete": [],
             "on_workflow_failed": [],
         }
+        # Subjects of tasks for which we have already emitted a terminal event.
+        # Declared here (rather than lazily via getattr/setattr in _monitor_completion)
+        # so the attribute lifecycle is per-instance, statically typed, and fresh
+        # each execute() call starts with a clean set per executor.
+        self._emitted_task_events: set[str] = set()
 
     def add_hook(self, event: str, callback: Callable[..., Any]) -> None:
         """Register a callback for a workflow execution event.
@@ -69,6 +74,9 @@ class WorkflowExecutor:
 
     async def execute(self, spec: WorkflowSpec) -> WorkflowState:
         """Run a full workflow: provision → assign tasks → monitor → teardown."""
+        # Reset per-execution state so reusing the same executor for a second
+        # workflow does not leak emitted-event subjects from the prior run (#203).
+        self._emitted_task_events = set()
         timeout = spec.timeout_seconds if spec.timeout_seconds is not None else settings.default_workflow_timeout
         try:
             return await asyncio.wait_for(self._run(spec), timeout=timeout)
@@ -313,9 +321,10 @@ class WorkflowExecutor:
 
             all_done = True
             any_failed = False
-            # Track which tasks already emitted events to avoid duplicate callbacks
-            emitted_done: set[str] = getattr(self, "_emitted_task_events", set())
-            self._emitted_task_events: set[str] = emitted_done  # type: ignore[attr-defined]
+            # Track which tasks already emitted events to avoid duplicate callbacks.
+            # Backed by self._emitted_task_events (initialised in __init__,
+            # reset in execute()) — see #197 / #203.
+            emitted_done = self._emitted_task_events
 
             for team_name, team_id in state.created_teams.items():
                 tasks = await self._client.get_tasks(team_id)

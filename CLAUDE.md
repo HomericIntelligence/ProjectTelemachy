@@ -4,7 +4,8 @@
 
 ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the
 ProjectAgamemnon REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and
-teams via Agamemnon, assigns tasks with dependency ordering, monitors execution via NATS events, and
+teams via Agamemnon, assigns tasks with dependency ordering, monitors execution by polling
+Agamemnon's REST API (NATS-based event monitoring is planned but not yet wired up), and
 tears down resources according to the workflow's teardown policy.
 
 **This project uses ProjectAgamemnon exclusively as its execution backend.**
@@ -69,7 +70,8 @@ teardown: on_completion | on_failure | never
 2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
 4. **Dependency-respecting** — tasks with `blocked_by` are not submitted until their predecessors complete.
-5. **Observable** — all state transitions are logged; NATS events drive completion detection.
+5. **Observable** — all state transitions are logged; completion is currently detected by HTTP
+   polling against Agamemnon (NATS event-driven completion is planned).
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
 ## Repository Structure

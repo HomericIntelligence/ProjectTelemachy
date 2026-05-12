@@ -167,14 +167,11 @@ class TestDependencyCycleDetection:
             team.detect_dependency_cycles()
 
     def test_self_dependency_raises(self) -> None:
+        # The self-dependency validator lives on TeamSpec.no_self_dependency;
+        # construct a TeamSpec containing the offending TaskSpec so the
+        # validator actually runs (the prior version of this test had an
+        # unreachable second TeamSpec(...) after the first raised — see #147).
         with pytest.raises(Exception, match="itself"):
-            TaskSpec(
-                subject="Task X",
-                description="...",
-                assign_to="a",
-                blocked_by=["Task X"],
-            )
-            # The validator runs at model level; construct TeamSpec to trigger it
             TeamSpec(
                 name="t",
                 agents=["a"],

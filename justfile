@@ -13,17 +13,17 @@ default:
 # Execute a workflow YAML file
 run WORKFLOW:
     AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
-        pixi run python -m telemachy.cli run {{WORKFLOW}}
+        pixi run python -m telemachy.cli run "{{WORKFLOW}}"
 
 # Dry-run: show what would be created without executing
 plan WORKFLOW:
     AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
-        pixi run python -m telemachy.cli plan {{WORKFLOW}}
+        pixi run python -m telemachy.cli plan "{{WORKFLOW}}"
 
 # Show status of a running workflow
 status WORKFLOW_ID:
     AGAMEMNON_URL={{AGAMEMNON_URL}} \
-        pixi run python -m telemachy.cli status {{WORKFLOW_ID}}
+        pixi run python -m telemachy.cli status "{{WORKFLOW_ID}}"
 
 # List all workflows (running and completed)
 list:
@@ -33,11 +33,11 @@ list:
 # Cancel a running workflow
 cancel WORKFLOW_ID:
     AGAMEMNON_URL={{AGAMEMNON_URL}} \
-        pixi run python -m telemachy.cli cancel {{WORKFLOW_ID}}
+        pixi run python -m telemachy.cli cancel "{{WORKFLOW_ID}}"
 
 # Validate a workflow YAML without executing
 validate WORKFLOW:
-    pixi run python -m telemachy.cli validate {{WORKFLOW}}
+    pixi run python -m telemachy.cli validate "{{WORKFLOW}}"
 
 # Export workflow JSON Schema for editor validation
 schema:
@@ -53,9 +53,16 @@ test:
 lint:
     pixi run ruff check src tests
 
+# Run mypy static type checker
+mypy:
+    pixi run mypy src/telemachy --ignore-missing-imports
+
 # Format code with ruff
 format:
     pixi run ruff format src tests
+
+# Run the full local CI suite: lint, mypy, tests
+check: lint mypy test
 
 # Install dev dependencies and set up pre-commit hooks
 bootstrap:

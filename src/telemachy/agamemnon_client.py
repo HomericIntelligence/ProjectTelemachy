@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import httpx
 
 from telemachy.models import AgentSpec, TaskSpec
+
+logger = logging.getLogger(__name__)
 
 
 class AgamemnonError(Exception):
@@ -61,6 +64,15 @@ class AgamemnonClient:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        else:
+            # Empty AGAMEMNON_API_KEY silently disabled auth before #159 — log
+            # so production misconfiguration is visible in the daemon log.
+            logger.warning(
+                "AgamemnonClient initialised with empty api_key — "
+                "requests to %s will be UNAUTHENTICATED. Set AGAMEMNON_API_KEY "
+                "for any non-local environment.",
+                self._base_url,
+            )
         self._headers = headers
         self._client: httpx.AsyncClient | None = None
 
@@ -210,8 +222,15 @@ class AgamemnonClient:
         if assignee_agent_id is not None:
             payload["assigneeAgentId"] = assignee_agent_id
         elif spec.assign_to:
-            # Fallback: spec.assign_to should be an ID, not a name — callers must resolve
-            payload["assigneeAgentId"] = spec.assign_to
+            # spec.assign_to is a workflow-author-facing agent NAME, not an
+            # Agamemnon agent ID. Silently posting it as assigneeAgentId would
+            # produce a 4xx (or worse, an orphaned task) at runtime — fail fast
+            # so the caller is forced to resolve the name first (see #198).
+            raise ValueError(
+                f"Task {spec.subject!r} has assign_to={spec.assign_to!r} but no "
+                "assignee_agent_id was supplied. Callers must resolve the agent "
+                "name to an Agamemnon agent ID before invoking create_task()."
+            )
         if blocked_by_ids:
             payload["blockedBy"] = blocked_by_ids
 
