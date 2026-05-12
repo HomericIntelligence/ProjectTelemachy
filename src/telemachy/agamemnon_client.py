@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 import httpx
 
 from telemachy.models import AgentSpec, TaskSpec
+
+logger = logging.getLogger(__name__)
 
 
 class AgamemnonError(Exception):
@@ -61,6 +64,15 @@ class AgamemnonClient:
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        else:
+            # Empty AGAMEMNON_API_KEY silently disabled auth before #159 — log
+            # so production misconfiguration is visible in the daemon log.
+            logger.warning(
+                "AgamemnonClient initialised with empty api_key — "
+                "requests to %s will be UNAUTHENTICATED. Set AGAMEMNON_API_KEY "
+                "for any non-local environment.",
+                self._base_url,
+            )
         self._headers = headers
         self._client: httpx.AsyncClient | None = None
 
