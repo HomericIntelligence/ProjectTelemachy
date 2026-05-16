@@ -106,14 +106,23 @@ class AgamemnonClient:
     async def _request_with_retry(
         self, method: str, url: str, *, max_attempts: int = 3, **kwargs: Any
     ) -> httpx.Response:
-        """Issue an HTTP request, retrying on server errors and transient failures."""
+        """Issue an HTTP request, retrying on server errors and transient failures.
+
+        Retries on:
+        - 5xx server errors
+        - 429 Too Many Requests (rate-limit) — see #165
+        - httpx ConnectError / TimeoutException
+        """
         last_exc: Exception | None = None
         for attempt in range(max_attempts):
             try:
                 resp = await self._http.request(method, url, **kwargs)
-                if resp.status_code < 500:
+                if resp.status_code == 429:
+                    last_exc = AgamemnonError(429, "Rate-limited (429); retrying")
+                elif resp.status_code < 500:
                     return resp
-                last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
+                else:
+                    last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
             if attempt < max_attempts - 1:
