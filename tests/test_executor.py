@@ -458,9 +458,11 @@ class TestWorkflowTimeout:
             await _a.sleep(10)
             return None
 
-        with patch.object(executor, "_run", new=slow_run):
-            with pytest.raises(WorkflowTimeoutError, match="exceeded its execution timeout"):
-                await executor.execute(spec)
+        with (
+            patch.object(executor, "_run", new=slow_run),
+            pytest.raises(WorkflowTimeoutError, match="exceeded its execution timeout"),
+        ):
+            await executor.execute(spec)
 
 
 # ---------------------------------------------------------------------------
