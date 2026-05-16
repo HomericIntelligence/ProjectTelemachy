@@ -461,3 +461,25 @@ class TestWorkflowTimeout:
         with patch.object(executor, "_run", new=slow_run):
             with pytest.raises(WorkflowTimeoutError, match="exceeded its execution timeout"):
                 await executor.execute(spec)
+
+
+# ---------------------------------------------------------------------------
+# Tests: stop-event graceful cancellation (#143)
+# ---------------------------------------------------------------------------
+
+class TestStopEvent:
+    @pytest.mark.asyncio
+    async def test_stop_event_set_before_execute_short_circuits_monitor(self) -> None:
+        import asyncio as _a
+
+        client = _make_mock_client()
+        spec = _make_spec(teardown="never")
+
+        stop_event = _a.Event()
+        stop_event.set()  # pre-set: monitor must observe it on first iteration
+
+        executor = WorkflowExecutor(client, poll_interval=0.01, stop_event=stop_event)
+        state = await executor.execute(spec)
+
+        # Workflow finishes (not hangs) when stop event is set.
+        assert state.completed_at is not None
