@@ -1,9 +1,9 @@
-# ADR-NNN: <Title>
+# ADR-NNN: `Title`
 
 - **Status:** Proposed | Accepted | Superseded by ADR-MMM
 - **Date:** YYYY-MM-DD
-- **Deciders:** <names>
-- **Context tags:** <area>
+- **Deciders:** `names`
+- **Context tags:** `area`
 
 ## Context
 

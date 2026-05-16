@@ -27,7 +27,7 @@ off (see "Handoff" below).
 ## Role boundaries
 
 | Agent | Owns | Must not do |
-|---|---|---|
+| --- | --- | --- |
 | ProjectTelemachy | workflow YAML interpretation, dependency ordering, teardown policy | spawn agents directly (always via Agamemnon) |
 | ProjectAgamemnon | agent / team / task lifecycle, HMAS orchestration | parse workflow YAML |
 | ProjectNestor | research and ideation upstream | execute workflows |

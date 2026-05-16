@@ -22,7 +22,7 @@ to confirm distribution compatibility.
 ## Findings
 
 | Dependency | License | Compatible with MIT distribution? |
-|---|---|---|
+| --- | --- | --- |
 | `httpx` | BSD-3-Clause | yes |
 | `pydantic` | MIT | yes |
 | `pydantic-settings` | MIT | yes |
