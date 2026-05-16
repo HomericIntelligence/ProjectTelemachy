@@ -437,3 +437,27 @@ class TestHooks:
 
         assert sync_calls == [{"subject": "T1", "status": "completed"}]
         assert async_calls == [{"subject": "T1", "status": "completed"}]
+
+
+# ---------------------------------------------------------------------------
+# Tests: timeout behaviour (#142)
+# ---------------------------------------------------------------------------
+
+class TestWorkflowTimeout:
+    @pytest.mark.asyncio
+    async def test_execute_raises_workflow_timeout_error_on_wait_for_timeout(self) -> None:
+        client = _make_mock_client()
+        spec = _make_spec()
+        spec.timeout_seconds = 0.01  # immediate timeout
+
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+
+        async def slow_run(_spec: object) -> object:
+            import asyncio as _a
+
+            await _a.sleep(10)
+            return None
+
+        with patch.object(executor, "_run", new=slow_run):
+            with pytest.raises(WorkflowTimeoutError, match="exceeded its execution timeout"):
+                await executor.execute(spec)
