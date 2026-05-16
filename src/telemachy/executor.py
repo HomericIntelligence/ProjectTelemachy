@@ -119,10 +119,15 @@ class WorkflowExecutor:
             else:
                 logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
 
-            state.status = "completed"
-            state.completed_at = _now()
-            logger.info("Workflow '%s' completed successfully", spec.name)
-            await self._emit("on_workflow_complete", state=state)
+            if state.status == "cancelled":
+                # Graceful stop-event cancellation — monitor returned early.
+                state.completed_at = _now()
+                logger.warning("Workflow '%s' was cancelled via stop event", spec.name)
+            else:
+                state.status = "completed"
+                state.completed_at = _now()
+                logger.info("Workflow '%s' completed successfully", spec.name)
+                await self._emit("on_workflow_complete", state=state)
 
         except asyncio.CancelledError:
             state.status = "cancelled"
@@ -315,7 +320,8 @@ class WorkflowExecutor:
         while True:
             if self._stop_event and self._stop_event.is_set():
                 logger.warning("Stop event set — aborting monitoring for workflow '%s'", state.spec.name)
-                raise asyncio.CancelledError("Workflow cancelled by stop event")
+                state.status = "cancelled"
+                return
 
             elapsed = time.monotonic() - start_time
             if elapsed > timeout:
