@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
-from telemachy.executor import WorkflowExecutor
+from telemachy.executor import WorkflowExecutor, WorkflowTimeoutError
 from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
 
 # ---------------------------------------------------------------------------
@@ -393,3 +393,47 @@ class TestErrorPaths:
         # The first agent (which was created) must have been deleted during teardown
         deleted_ids = [call.args[0] for call in client.delete_agent.call_args_list]
         assert "agent-id-first" in deleted_ids
+
+# ---------------------------------------------------------------------------
+# Tests: hooks (#144)
+# ---------------------------------------------------------------------------
+
+class TestHooks:
+    def test_add_hook_rejects_unknown_event(self) -> None:
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        with pytest.raises(ValueError, match="Unknown hook event"):
+            executor.add_hook("on_unknown_event", lambda **_: None)
+
+    def test_add_hook_accepts_known_events(self) -> None:
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        for event in (
+            "on_task_complete",
+            "on_task_failed",
+            "on_workflow_complete",
+            "on_workflow_failed",
+        ):
+            executor.add_hook(event, lambda **_: None)
+
+    @pytest.mark.asyncio
+    async def test_emit_invokes_sync_and_async_callbacks(self) -> None:
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+
+        sync_calls: list[dict] = []
+        async_calls: list[dict] = []
+
+        def sync_cb(**kwargs: object) -> None:
+            sync_calls.append(kwargs)
+
+        async def async_cb(**kwargs: object) -> None:
+            async_calls.append(kwargs)
+
+        executor.add_hook("on_task_complete", sync_cb)
+        executor.add_hook("on_task_complete", async_cb)
+
+        await executor._emit("on_task_complete", subject="T1", status="completed")
+
+        assert sync_calls == [{"subject": "T1", "status": "completed"}]
+        assert async_calls == [{"subject": "T1", "status": "completed"}]
