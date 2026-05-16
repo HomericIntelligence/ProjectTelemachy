@@ -220,7 +220,7 @@ jobs:
         # downgrading to YAML-parse-only — see #150.
         run: |
           set -euo pipefail
-          if ! pixi run python -m telemachy.cli schema > /tmp/telemachy-schema.json 2>/tmp/telemachy-schema.err; then
+          if ! pixi run python -m telemachy.cli schema -o /tmp/telemachy-schema.json >/tmp/telemachy-schema.out 2>/tmp/telemachy-schema.err; then
             echo "::error::Schema export failed; refusing to fall back to YAML-parse-only."
             if [ -s /tmp/telemachy-schema.err ]; then
               cat /tmp/telemachy-schema.err >&2
