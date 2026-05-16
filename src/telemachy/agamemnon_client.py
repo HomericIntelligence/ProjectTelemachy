@@ -185,7 +185,8 @@ class AgamemnonClient:
         """List all agents."""
         response = await self._request_with_retry("GET", "/v1/agents")
         self._raise_for_status(response)
-        return response.json().get("agents", [])  # type: ignore[return-value]
+        agents: list[dict[str, object]] = response.json().get("agents", [])
+        return agents
 
     # === Team endpoints ===
 
@@ -267,10 +268,14 @@ class AgamemnonClient:
             "PUT", f"/v1/teams/{team_id}/tasks/{task_id}", json=payload
         )
         self._raise_for_status(response)
-        return response.json()  # type: ignore[return-value]
+        body: dict[str, object] = response.json()
+        return body
 
     async def get_tasks(self, team_id: str) -> list[dict[str, object]]:
         """List all tasks for a team."""
         response = await self._request_with_retry("GET", f"/v1/teams/{team_id}/tasks")
         self._raise_for_status(response)
-        return _require(response.json(), "tasks", context="get_tasks")  # type: ignore[return-value]
+        tasks: list[dict[str, object]] = _require(
+            response.json(), "tasks", context="get_tasks"
+        )
+        return tasks
