@@ -109,6 +109,32 @@ ProjectTelemachy/
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
 - Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
 
+## Agent Guardrails
+
+AI agents (Claude, Myrmidon swarm, automation) working in this repository must
+obey the following hard rules. These guardrails apply on top of the rest of
+this document, the project's `CONTRIBUTING.md`, and the user's per-machine
+memory.
+
+- **Never commit directly to `main`.** All changes flow through pull requests.
+- **Never `--admin` merge.** Squash-merge through GitHub UI or `gh pr merge --auto --squash` only.
+- **Never delete branches with `git branch -d/-D`.** Use a different branch name instead.
+- **Never delete a running agent or team via Agamemnon.** Always follow the
+  workflow's declared `teardown` policy (`on_completion`, `on_failure`,
+  `never`) — never short-circuit it from an agent shell.
+- **Always `just plan` before `just run`** on a workflow you didn't author.
+- **Always `just validate` before opening a PR** that touches a workflow YAML.
+- **Never bypass `pre-commit`** unless the brief explicitly authorises
+  `--no-verify` (it stalls on cold worktrees; document the bypass in the
+  PR body).
+- **Never write to `pixi.lock` by hand;** regenerate via `pixi install`.
+- **Workflow YAML is a public API** — any change to required fields,
+  default values, or schema constraints requires a `MINOR` (additive) or
+  `MAJOR` (breaking) version bump per `docs/backwards-compat.md`.
+
+If a task appears to require violating one of the rules above, stop and
+open an issue describing the conflict before proceeding.
+
 ## Common Commands
 
 ```bash
