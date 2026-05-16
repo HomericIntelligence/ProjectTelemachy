@@ -1,0 +1,63 @@
+# Releasing ProjectTelemachy
+
+This document describes the **manual** release process for
+ProjectTelemachy. Automation is tracked in the issue backlog.
+
+## Version sources of truth
+
+Versions appear in:
+
+1. `pyproject.toml` — `version` (canonical).
+2. `src/telemachy/__init__.py` — `__version__` constant.
+3. `CHANGELOG.md` — `## [X.Y.Z] - YYYY-MM-DD` heading.
+
+All three must agree at release time. A CI sync check exists (see
+`workflows/`) but is currently advisory; the release author is responsible
+for keeping them aligned.
+
+## Versioning policy
+
+ProjectTelemachy follows [Semantic Versioning 2.0.0](https://semver.org/).
+The public surface area governed by SemVer is:
+
+- The **workflow YAML schema** (`apiVersion: telemachy/v1`, field names,
+  field types, default values).
+- The Typer CLI subcommand contract (`run`, `plan`, `status`, `validate`,
+  `list`, `cancel`) — names and required arguments.
+- Public Python imports under `telemachy.*` (executor, models, config).
+
+Internal: HTTP client retry tuning, monitor poll interval defaults,
+logging output, and test fixtures are **not** public API.
+
+While the version remains `0.y.z` the workflow schema may receive
+breaking changes in any `MINOR` bump; operators should pin a specific
+`MINOR` until v1.0.0.
+
+## Release procedure
+
+1. Decide the bump kind (`MAJOR`, `MINOR`, `PATCH`).
+2. Update the three version sources above in a single commit:
+   `chore(release): bump version to X.Y.Z`.
+3. Update `CHANGELOG.md`:
+   - Move accumulated `## [Unreleased]` entries under
+     `## [X.Y.Z] - YYYY-MM-DD`.
+   - Add a fresh empty `## [Unreleased]` block above.
+4. Open a PR titled `chore(release): X.Y.Z`.
+5. After squash-merge, create an annotated git tag on the squash commit:
+   `git tag -a vX.Y.Z -m "Release X.Y.Z"` and push it.
+6. Create a matching GitHub Release referencing the `CHANGELOG.md` entry.
+7. Announce the release in the Odysseus integration channel.
+
+## Who approves
+
+A release PR requires at least one CODEOWNERS approval. The release
+author is responsible for verifying CI green before tagging.
+
+## Hot-fixes
+
+For patch releases off a previous `MINOR`:
+
+1. Branch from the last `vX.Y.0` tag as `release/X.Y`.
+2. Cherry-pick (or re-author) the minimal fix; bump `PATCH`.
+3. Tag `vX.Y.Z+1` from the release branch.
+4. Forward-port the fix to `main` in a separate PR.
