@@ -165,7 +165,7 @@ def run(
                 nonlocal completed_count
                 completed_count += 1
                 task_info = kwargs.get("task", {})
-                subject = task_info.get("subject", "?") if isinstance(task_info, dict) else "?"  # type: ignore[union-attr]
+                subject = task_info.get("subject", "?") if isinstance(task_info, dict) else "?"
                 progress.update(
                     task_id,
                     description=(

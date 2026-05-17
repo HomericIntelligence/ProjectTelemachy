@@ -120,6 +120,30 @@ async def test_create_agent_retries_on_503() -> None:
 
 
 # ---------------------------------------------------------------------------
+# TEST 4b — retry on 429 rate-limit (#165)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_agent_retries_on_429() -> None:
+    """429 Too Many Requests must trigger retry, not be returned to caller."""
+    client = await _enter_client()
+    rate_limited = _make_response(429, {"detail": "rate limited"})
+    ok_resp = _make_response(201, {"agent": {"id": "rl-id"}})
+
+    mock_request = AsyncMock(side_effect=[rate_limited, ok_resp])
+
+    with (
+        patch.object(client._client, "request", mock_request),
+        patch("telemachy.agamemnon_client.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        agent_id = await client.create_agent(_local_agent_spec())
+
+    assert agent_id == "rl-id"
+    assert mock_request.call_count == 2
+
+
+# ---------------------------------------------------------------------------
 # TEST 5 — start_agent calls correct endpoint
 # ---------------------------------------------------------------------------
 

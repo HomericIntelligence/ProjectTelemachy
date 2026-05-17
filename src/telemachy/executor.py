@@ -34,11 +34,16 @@ class WorkflowExecutor:
         poll_interval: float = 5.0,
         dry_run: bool = False,
         stop_event: asyncio.Event | None = None,
+        max_concurrent_provisioning: int = 16,
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
         self._dry_run = dry_run
         self._stop_event = stop_event
+        # Bound concurrent agent-provisioning fan-out so a workflow with many
+        # agents does not overwhelm Agamemnon (#166). Default 16 matches
+        # typical small-fleet sizing; callers can raise/lower as needed.
+        self._provision_semaphore = asyncio.Semaphore(max(1, max_concurrent_provisioning))
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -114,10 +119,15 @@ class WorkflowExecutor:
             else:
                 logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
 
-            state.status = "completed"
-            state.completed_at = _now()
-            logger.info("Workflow '%s' completed successfully", spec.name)
-            await self._emit("on_workflow_complete", state=state)
+            if state.status == "cancelled":
+                # Graceful stop-event cancellation — monitor returned early.
+                state.completed_at = _now()
+                logger.warning("Workflow '%s' was cancelled via stop event", spec.name)
+            else:
+                state.status = "completed"
+                state.completed_at = _now()
+                logger.info("Workflow '%s' completed successfully", spec.name)
+                await self._emit("on_workflow_complete", state=state)
 
         except asyncio.CancelledError:
             state.status = "cancelled"
@@ -150,7 +160,12 @@ class WorkflowExecutor:
         that teardown can clean up already-created agents before re-raising.
         """
         logger.info("Provisioning %d agent(s)...", len(agents))
-        coros = [self._provision_one_agent(agent) for agent in agents]
+
+        async def _bounded(agent: AgentSpec) -> tuple[str, str]:
+            async with self._provision_semaphore:
+                return await self._provision_one_agent(agent)
+
+        coros = [_bounded(agent) for agent in agents]
         raw_results: list[tuple[str, str] | BaseException] = await asyncio.gather(
             *coros, return_exceptions=True
         )
@@ -305,7 +320,8 @@ class WorkflowExecutor:
         while True:
             if self._stop_event and self._stop_event.is_set():
                 logger.warning("Stop event set — aborting monitoring for workflow '%s'", state.spec.name)
-                raise asyncio.CancelledError("Workflow cancelled by stop event")
+                state.status = "cancelled"
+                return
 
             elapsed = time.monotonic() - start_time
             if elapsed > timeout:

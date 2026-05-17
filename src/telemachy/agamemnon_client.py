@@ -106,14 +106,23 @@ class AgamemnonClient:
     async def _request_with_retry(
         self, method: str, url: str, *, max_attempts: int = 3, **kwargs: Any
     ) -> httpx.Response:
-        """Issue an HTTP request, retrying on server errors and transient failures."""
+        """Issue an HTTP request, retrying on server errors and transient failures.
+
+        Retries on:
+        - 5xx server errors
+        - 429 Too Many Requests (rate-limit) — see #165
+        - httpx ConnectError / TimeoutException
+        """
         last_exc: Exception | None = None
         for attempt in range(max_attempts):
             try:
                 resp = await self._http.request(method, url, **kwargs)
-                if resp.status_code < 500:
+                if resp.status_code == 429:
+                    last_exc = AgamemnonError(429, "Rate-limited (429); retrying")
+                elif resp.status_code < 500:
                     return resp
-                last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
+                else:
+                    last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
             if attempt < max_attempts - 1:
@@ -176,7 +185,8 @@ class AgamemnonClient:
         """List all agents."""
         response = await self._request_with_retry("GET", "/v1/agents")
         self._raise_for_status(response)
-        return response.json().get("agents", [])  # type: ignore[return-value]
+        agents: list[dict[str, object]] = response.json().get("agents", [])
+        return agents
 
     # === Team endpoints ===
 
@@ -258,10 +268,14 @@ class AgamemnonClient:
             "PUT", f"/v1/teams/{team_id}/tasks/{task_id}", json=payload
         )
         self._raise_for_status(response)
-        return response.json()  # type: ignore[return-value]
+        body: dict[str, object] = response.json()
+        return body
 
     async def get_tasks(self, team_id: str) -> list[dict[str, object]]:
         """List all tasks for a team."""
         response = await self._request_with_retry("GET", f"/v1/teams/{team_id}/tasks")
         self._raise_for_status(response)
-        return _require(response.json(), "tasks", context="get_tasks")  # type: ignore[return-value]
+        tasks: list[dict[str, object]] = _require(
+            response.json(), "tasks", context="get_tasks"
+        )
+        return tasks
