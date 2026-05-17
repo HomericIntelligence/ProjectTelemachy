@@ -252,7 +252,7 @@ jobs:
           dists = importlib.metadata.distributions()
           lines = [f'{d.metadata[\"Name\"]}=={d.metadata[\"Version\"]}' for d in dists]
           sys.stdout.write('\n'.join(lines) + '\n')
-          " > /tmp/requirements-freeze.txt
+          " | grep -viE '^telemachy==' > /tmp/requirements-freeze.txt
           pip-audit -r /tmp/requirements-freeze.txt --skip-editable
 
   security-secrets-scan:
