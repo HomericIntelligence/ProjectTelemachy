@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TypedDict
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class AgamemnonClientKwargs(TypedDict):
@@ -32,11 +36,21 @@ class Settings(BaseSettings):
     nats_url: str = "nats://localhost:4222"
     workflows_dir: Path = Path("workflows")
     host_id: str = "hermes"
-    require_tls: bool = False
+    require_tls: bool = True
     monitor_timeout_seconds: float = 3600.0
     monitor_max_polls: int = 7200
     log_level: str = "INFO"
     default_workflow_timeout: float = 7200.0
+
+    @model_validator(mode="after")
+    def _warn_if_tls_disabled(self) -> Settings:
+        if not self.require_tls:
+            logger.warning(
+                "REQUIRE_TLS=false set explicitly — Agamemnon traffic "
+                "(including API key in Authorization header) will be "
+                "transmitted in cleartext. Use only for local development."
+            )
+        return self
 
     def client_kwargs(self) -> AgamemnonClientKwargs:
         """Return keyword arguments for constructing an AgamemnonClient.
