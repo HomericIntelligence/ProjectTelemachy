@@ -66,7 +66,8 @@ just validate <WORKFLOW>
 
 Workflow definitions live in the `workflows/` directory. Reference existing workflows as
 examples for the expected schema. Workflows define steps that execute against the
-Agamemnon REST API. Inter-agent NATS messaging is part of the planned event-monitoring work (#92) and is not currently used by the engine.
+Agamemnon REST API. Inter-agent NATS messaging is part of the planned event-monitoring
+work (#92) and is not currently used by the engine.
 
 ## Development Workflow
 

@@ -41,6 +41,7 @@ def _setup_logging() -> None:
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 
+
 _SHELL_METACHARACTERS: re.Pattern[str] = re.compile(r"[;&|$`><(){}\[\]!?*~\\]")
 
 
@@ -52,9 +53,7 @@ def _validate_workflow_path(path: Path) -> None:
     """
     raw = str(path)
     if _SHELL_METACHARACTERS.search(raw):
-        raise typer.BadParameter(
-            f"Workflow path contains disallowed shell metacharacters: {raw!r}"
-        )
+        raise typer.BadParameter(f"Workflow path contains disallowed shell metacharacters: {raw!r}")
     if not path.exists():
         raise typer.BadParameter(f"Workflow file not found: {raw!r}")
     if not path.is_file():
@@ -120,8 +119,16 @@ def _print_plan(spec: WorkflowSpec) -> None:
 
 @app.command()
 def run(
-    workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
-    dry_run: Annotated[bool, typer.Option("--dry-run/--no-dry-run", help="Simulate execution without calling Agamemnon")] = False,
+    workflow_path: Annotated[
+        Path,
+        typer.Argument(
+            help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)"
+        ),
+    ],
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run/--no-dry-run", help="Simulate execution without calling Agamemnon"),
+    ] = False,
 ) -> None:
     """Execute a workflow YAML file."""
     _validate_workflow_path(workflow_path)
@@ -131,7 +138,9 @@ def run(
         console.print(f"[bold yellow][dry-run][/bold yellow] Simulating workflow: {spec.name}")
         _print_plan(spec)
         state = asyncio.run(run_workflow(spec, dry_run=True))
-        console.print(f"[bold yellow][dry-run][/bold yellow] Simulation complete. id={state.workflow_id}")
+        console.print(
+            f"[bold yellow][dry-run][/bold yellow] Simulation complete. id={state.workflow_id}"
+        )
         return
 
     console.print(f"[bold green]Running workflow:[/bold green] {spec.name}")
@@ -185,8 +194,7 @@ def run(
         else:
             console.print(
                 f"[bold red]Workflow {result.status}.[/bold red] "
-                f"id={result.workflow_id}"
-                + (f"  error={result.error}" if result.error else "")
+                f"id={result.workflow_id}" + (f"  error={result.error}" if result.error else "")
             )
             raise typer.Exit(1)
 
@@ -205,7 +213,12 @@ def plan(
 
 @app.command()
 def validate(
-    workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
+    workflow_path: Annotated[
+        Path,
+        typer.Argument(
+            help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)"
+        ),
+    ],
 ) -> None:
     """Validate a workflow YAML file against the Telemachy schema."""
     _validate_workflow_path(workflow_path)
@@ -259,12 +272,14 @@ def cancel(
 def schema(
     output: Path = typer.Option(  # noqa: B008
         Path("schemas/workflow-v1.json"),
-        "--output", "-o",
+        "--output",
+        "-o",
         help="Path to write the JSON Schema file",
     ),
 ) -> None:
     """Export the workflow YAML JSON Schema for editor validation."""
     from telemachy.schema import write_workflow_schema
+
     output.parent.mkdir(parents=True, exist_ok=True)
     write_workflow_schema(output)
     typer.echo(f"Schema written to {output}")

@@ -28,11 +28,13 @@ WorkflowExecutor
     └── AgamemnonClient  →  DELETE /v1/agents/{id}       (teardown)
 ```
 
-_Planned (issue #92): a NATS subscriber consuming Agamemnon task-lifecycle events will replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
+_Planned (issue #92): a NATS subscriber consuming Agamemnon task-lifecycle events will
+replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
 
 ## Implementation Status
 
 ✅ Implemented
+
 - HTTP polling for task completion — `WorkflowExecutor._monitor_completion`
   (`src/telemachy/executor.py:311`), bounded by `settings.monitor_timeout_seconds`
   and `settings.monitor_max_polls`.
@@ -43,6 +45,7 @@ _Planned (issue #92): a NATS subscriber consuming Agamemnon task-lifecycle event
   (`src/telemachy/agamemnon_client.py:49-61`).
 
 📋 Planned (tracked under #92)
+
 - NATS subscriber consuming Agamemnon task-lifecycle events.
 - Replacement of `_monitor_completion`'s polling loop with event-driven
   completion detection.
@@ -88,7 +91,9 @@ teardown: on_completion | on_failure | never
 2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
 4. **Dependency-respecting** — tasks with `blocked_by` are not submitted until their predecessors complete.
-5. **Observable** — all state transitions are logged. Task completion is detected by HTTP polling against Agamemnon's REST API in `_monitor_completion`; NATS event-driven monitoring is planned under #92 and not yet wired up.
+5. **Observable** — all state transitions are logged. Task completion is detected by HTTP
+   polling against Agamemnon's REST API in `_monitor_completion`; NATS event-driven
+   monitoring is planned under #92 and not yet wired up.
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
 ## Repository Structure

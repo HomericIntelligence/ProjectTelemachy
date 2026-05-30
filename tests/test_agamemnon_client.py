@@ -33,6 +33,7 @@ async def _enter_client(url: str = "http://localhost:8080", **kwargs: object) ->
     client = AgamemnonClient(url=url, **kwargs)  # type: ignore[arg-type]
     # Manually install a real-ish AsyncClient so _http property works
     import httpx
+
     client._client = httpx.AsyncClient(base_url=url)
     return client
 
