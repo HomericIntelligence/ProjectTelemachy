@@ -1,6 +1,6 @@
 [workspace]
 name = "project-telemachy"
-version = "0.1.0"
+version = "0.2.0"
 description = "Declarative workflow engine for ProjectAgamemnon multi-agent workflows"
 channels = ["conda-forge"]
 platforms = ["linux-64"]

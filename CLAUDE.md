@@ -180,7 +180,7 @@ just format                        # ruff format
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL. Forwarded to `AgamemnonClient` and validated against `tls://` scheme when `REQUIRE_TLS=true`. **Not yet used to subscribe to events** — reserved for the planned NATS subscriber (#92). |
 | `WORKFLOWS_DIR` | `workflows` | Directory to search for workflow YAML files |
 | `HOST_ID` | `hermes` | Host identifier embedded in Agamemnon task assignments |
-| `REQUIRE_TLS` | `false` | Reject non-TLS Agamemnon connections when `true` |
+| `REQUIRE_TLS` | `true` | Reject non-TLS Agamemnon connections. Set to `false` to allow cleartext for local dev (logs a WARNING). |
 | `LOG_LEVEL` | `INFO` | Python logging level (DEBUG, INFO, WARNING, ERROR) |
 | `MONITOR_TIMEOUT_SECONDS` | `3600` | Seconds before workflow monitor times out |
 | `MONITOR_MAX_POLLS` | `7200` | Maximum polling attempts for workflow monitor |
