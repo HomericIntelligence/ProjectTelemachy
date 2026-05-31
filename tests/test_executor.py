@@ -14,15 +14,14 @@ from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_spec(
     agents: list[dict] | None = None,
     tasks: list[dict] | None = None,
     teardown: str = "on_completion",
 ) -> WorkflowSpec:
     agents = agents or [{"name": "worker", "runtime": "local"}]
-    tasks = tasks or [
-        {"subject": "Task 1", "description": "Do work", "assign_to": "worker"}
-    ]
+    tasks = tasks or [{"subject": "Task 1", "description": "Do work", "assign_to": "worker"}]
     return WorkflowSpec.model_validate(
         {
             "apiVersion": "telemachy/v1",
@@ -50,15 +49,14 @@ def _make_mock_client() -> MagicMock:
     client.create_team = AsyncMock(return_value="team-id-001")
     client.create_task = AsyncMock(return_value="task-id-001")
     client.update_task = AsyncMock()
-    client.get_tasks = AsyncMock(
-        return_value=[{"subject": "Task 1", "status": "completed"}]
-    )
+    client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "completed"}])
     return client
 
 
 # ---------------------------------------------------------------------------
 # Tests: provisioning
 # ---------------------------------------------------------------------------
+
 
 class TestProvisioning:
     @pytest.mark.asyncio
@@ -120,6 +118,7 @@ class TestProvisioning:
 # Tests: team and task creation
 # ---------------------------------------------------------------------------
 
+
 class TestTaskCreation:
     @pytest.mark.asyncio
     async def test_create_team_called(self) -> None:
@@ -166,7 +165,10 @@ class TestTaskCreation:
         get_tasks_responses = [
             [{"subject": "Step 1", "status": "pending"}],
             [{"subject": "Step 1", "status": "completed"}],
-            [{"subject": "Step 1", "status": "completed"}, {"subject": "Step 2", "status": "completed"}],
+            [
+                {"subject": "Step 1", "status": "completed"},
+                {"subject": "Step 2", "status": "completed"},
+            ],
         ]
         call_count = {"n": 0}
 
@@ -200,6 +202,7 @@ class TestTaskCreation:
 # ---------------------------------------------------------------------------
 # Tests: teardown
 # ---------------------------------------------------------------------------
+
 
 class TestTeardown:
     @pytest.mark.asyncio
@@ -248,9 +251,7 @@ class TestTeardown:
     @pytest.mark.asyncio
     async def test_failed_state_when_task_fails(self) -> None:
         client = _make_mock_client()
-        client.get_tasks = AsyncMock(
-            return_value=[{"subject": "Task 1", "status": "failed"}]
-        )
+        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "failed"}])
         spec = _make_spec(teardown="never")
 
         executor = WorkflowExecutor(client, poll_interval=0.01)
@@ -263,6 +264,7 @@ class TestTeardown:
 # ---------------------------------------------------------------------------
 # Tests: error paths
 # ---------------------------------------------------------------------------
+
 
 class TestErrorPaths:
     @pytest.mark.asyncio
@@ -308,10 +310,7 @@ class TestErrorPaths:
         assert state.completed_at is not None
 
         # Task B must never have been submitted
-        submitted_subjects = [
-            call.args[1].subject
-            for call in client.create_task.call_args_list
-        ]
+        submitted_subjects = [call.args[1].subject for call in client.create_task.call_args_list]
         assert "Task B" not in submitted_subjects
         assert "Task A" in submitted_subjects
 
@@ -394,9 +393,11 @@ class TestErrorPaths:
         deleted_ids = [call.args[0] for call in client.delete_agent.call_args_list]
         assert "agent-id-first" in deleted_ids
 
+
 # ---------------------------------------------------------------------------
 # Tests: hooks (#144)
 # ---------------------------------------------------------------------------
+
 
 class TestHooks:
     def test_add_hook_rejects_unknown_event(self) -> None:
@@ -443,6 +444,7 @@ class TestHooks:
 # Tests: timeout behaviour (#142)
 # ---------------------------------------------------------------------------
 
+
 class TestWorkflowTimeout:
     @pytest.mark.asyncio
     async def test_execute_raises_workflow_timeout_error_on_wait_for_timeout(self) -> None:
@@ -468,6 +470,7 @@ class TestWorkflowTimeout:
 # ---------------------------------------------------------------------------
 # Tests: stop-event graceful cancellation (#143)
 # ---------------------------------------------------------------------------
+
 
 class TestStopEvent:
     @pytest.mark.asyncio

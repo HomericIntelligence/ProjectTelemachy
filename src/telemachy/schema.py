@@ -1,4 +1,5 @@
 """JSON Schema export for workflow YAML validation."""
+
 from __future__ import annotations
 
 import json
