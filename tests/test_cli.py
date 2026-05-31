@@ -82,9 +82,7 @@ def test_validate_valid_yaml(valid_workflow_file: Path) -> None:
     """validate command exits 0 and prints 'valid' for a correct YAML."""
     result = runner.invoke(app, ["validate", str(valid_workflow_file)])
     assert result.exit_code == 0, f"Unexpected exit code. Output:\n{result.output}"
-    assert "valid" in result.output.lower(), (
-        f"Expected 'valid' in output but got:\n{result.output}"
-    )
+    assert "valid" in result.output.lower(), f"Expected 'valid' in output but got:\n{result.output}"
 
 
 # ---------------------------------------------------------------------------
@@ -178,18 +176,14 @@ def test_run_dry_run(valid_workflow_file: Path) -> None:
 
     with patch("telemachy.cli.run_workflow", new_callable=AsyncMock) as mock_run:
         mock_run.return_value = mock_state
-        result = runner.invoke(
-            app, ["run", str(valid_workflow_file), "--dry-run"]
-        )
+        result = runner.invoke(app, ["run", str(valid_workflow_file), "--dry-run"])
 
     assert result.exit_code == 0, (
-        f"Expected exit code 0 for --dry-run, got {result.exit_code}. "
-        f"Output:\n{result.output}"
+        f"Expected exit code 0 for --dry-run, got {result.exit_code}. Output:\n{result.output}"
     )
     # run_workflow should have been called once with dry_run=True
     mock_run.assert_called_once()
     _args, kwargs = mock_run.call_args
     assert kwargs.get("dry_run") is True or (len(_args) > 1 and _args[1] is True), (
-        f"Expected run_workflow to be called with dry_run=True, "
-        f"call_args={mock_run.call_args}"
+        f"Expected run_workflow to be called with dry_run=True, call_args={mock_run.call_args}"
     )

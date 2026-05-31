@@ -63,10 +63,7 @@ class WorkflowExecutor:
         on_workflow_complete, on_workflow_failed.
         """
         if event not in self._hooks:
-            raise ValueError(
-                f"Unknown hook event {event!r}. "
-                f"Valid events: {sorted(self._hooks)}"
-            )
+            raise ValueError(f"Unknown hook event {event!r}. Valid events: {sorted(self._hooks)}")
         self._hooks[event].append(callback)
 
     async def _emit(self, event: str, **kwargs: Any) -> None:
@@ -82,7 +79,11 @@ class WorkflowExecutor:
         # Reset per-execution state so reusing the same executor for a second
         # workflow does not leak emitted-event subjects from the prior run (#203).
         self._emitted_task_events = set()
-        timeout = spec.timeout_seconds if spec.timeout_seconds is not None else settings.default_workflow_timeout
+        timeout = (
+            spec.timeout_seconds
+            if spec.timeout_seconds is not None
+            else settings.default_workflow_timeout
+        )
         try:
             return await asyncio.wait_for(self._run(spec), timeout=timeout)
         except TimeoutError as exc:
@@ -109,9 +110,7 @@ class WorkflowExecutor:
             state.created_agents = await self._provision_agents(spec.agents, state)
 
             # Create teams and submit tasks (respecting dependencies)
-            state.created_teams = await self._create_teams(
-                spec.teams, state.created_agents
-            )
+            state.created_teams = await self._create_teams(spec.teams, state.created_agents)
 
             # Monitor until all tasks reach a terminal state (skipped in dry-run)
             if not self._dry_run:
@@ -248,7 +247,7 @@ class WorkflowExecutor:
         If a dependency has failed/errored/cancelled, the dependent task is skipped
         rather than waiting forever (prevents infinite loop — see #13).
         """
-        submitted: dict[str, str] = {}   # subject → task_id
+        submitted: dict[str, str] = {}  # subject → task_id
         completed_subjects: set[str] = set()
         failed_subjects: set[str] = set()
         skipped_subjects: set[str] = set()
@@ -257,22 +256,24 @@ class WorkflowExecutor:
         while pending:
             # Skip tasks whose dependencies have failed
             newly_skipped = [
-                t for t in pending
+                t
+                for t in pending
                 if any(dep in failed_subjects or dep in skipped_subjects for dep in t.blocked_by)
             ]
             for task_spec in newly_skipped:
                 logger.warning(
                     "Skipping task '%s': a dependency failed or was skipped (%s)",
                     task_spec.subject,
-                    [dep for dep in task_spec.blocked_by if dep in failed_subjects or dep in skipped_subjects],
+                    [
+                        dep
+                        for dep in task_spec.blocked_by
+                        if dep in failed_subjects or dep in skipped_subjects
+                    ],
                 )
                 skipped_subjects.add(task_spec.subject)
                 pending.remove(task_spec)
 
-            ready = [
-                t for t in pending
-                if all(dep in completed_subjects for dep in t.blocked_by)
-            ]
+            ready = [t for t in pending if all(dep in completed_subjects for dep in t.blocked_by)]
             if not ready:
                 if not pending:
                     break
@@ -292,7 +293,9 @@ class WorkflowExecutor:
                 continue
 
             for task_spec in ready:
-                blocked_by_ids = [submitted[dep] for dep in task_spec.blocked_by if dep in submitted]
+                blocked_by_ids = [
+                    submitted[dep] for dep in task_spec.blocked_by if dep in submitted
+                ]
                 # Resolve agent name → Agamemnon agent ID before submitting (#12)
                 resolved_agent_id: str | None = None
                 if task_spec.assign_to:
@@ -301,9 +304,7 @@ class WorkflowExecutor:
                     team_id, task_spec, blocked_by_ids, assignee_agent_id=resolved_agent_id
                 )
                 submitted[task_spec.subject] = task_id
-                logger.info(
-                    "Submitted task '%s' → id=%s", task_spec.subject, task_id
-                )
+                logger.info("Submitted task '%s' → id=%s", task_spec.subject, task_id)
                 pending.remove(task_spec)
 
     # === Monitoring ===
@@ -319,7 +320,9 @@ class WorkflowExecutor:
 
         while True:
             if self._stop_event and self._stop_event.is_set():
-                logger.warning("Stop event set — aborting monitoring for workflow '%s'", state.spec.name)
+                logger.warning(
+                    "Stop event set — aborting monitoring for workflow '%s'", state.spec.name
+                )
                 state.status = "cancelled"
                 return
 
@@ -381,15 +384,12 @@ class WorkflowExecutor:
 
         policy = state.spec.teardown
 
-        should_teardown = (
-            (policy == "on_completion" and state.status == "completed")
-            or (policy == "on_failure" and state.status == "failed")
+        should_teardown = (policy == "on_completion" and state.status == "completed") or (
+            policy == "on_failure" and state.status == "failed"
         )
 
         if not should_teardown:
-            logger.info(
-                "Teardown skipped (policy=%s, status=%s)", policy, state.status
-            )
+            logger.info("Teardown skipped (policy=%s, status=%s)", policy, state.status)
             return
 
         logger.info("Running teardown for workflow '%s'...", state.spec.name)

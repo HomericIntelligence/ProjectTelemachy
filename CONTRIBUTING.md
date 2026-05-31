@@ -3,7 +3,7 @@
 Thank you for your interest in contributing to ProjectTelemachy! This is the workflow
 execution engine for the [HomericIntelligence](https://github.com/HomericIntelligence)
 distributed agent mesh — it runs, plans, monitors, and cancels named workflow YAML files
-against Agamemnon and NATS.
+against Agamemnon's REST API. (A NATS-based event channel is planned — see issue #92 — but is not yet wired up.)
 
 For an overview of the full ecosystem, see the
 [Odysseus](https://github.com/HomericIntelligence/Odysseus) meta-repo.
@@ -66,7 +66,8 @@ just validate <WORKFLOW>
 
 Workflow definitions live in the `workflows/` directory. Reference existing workflows as
 examples for the expected schema. Workflows define steps that execute against the
-Agamemnon API and communicate over NATS subjects.
+Agamemnon REST API. Inter-agent NATS messaging is part of the planned event-monitoring
+work (#92) and is not currently used by the engine.
 
 ## Development Workflow
 

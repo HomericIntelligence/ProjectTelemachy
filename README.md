@@ -1,14 +1,15 @@
 # ProjectTelemachy
 
 A declarative workflow engine for [ProjectAgamemnon](https://github.com/HomericIntelligence/ProjectAgamemnon).
-Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, event monitoring,
+Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, completion monitoring,
 and teardown via the Agamemnon REST API.
 
 ## Overview
 
-Telemachy reads a workflow YAML file, creates agents and teams through ProjectAgamemnon, assigns tasks
-with dependency ordering, monitors task completion via NATS events, and tears down provisioned resources
-according to your policy.
+Telemachy reads a workflow YAML file, creates agents and teams through ProjectAgamemnon,
+assigns tasks with dependency ordering, monitors task completion by polling the Agamemnon
+REST API (event-driven NATS monitoring is planned — see issue #92), and tears down
+provisioned resources according to your policy.
 
 No separate agent system is used. All execution is driven exclusively through ProjectAgamemnon.
 

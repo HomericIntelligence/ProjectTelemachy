@@ -250,7 +250,8 @@ jobs:
           pixi run python -c "
           import importlib.metadata, sys
           dists = importlib.metadata.distributions()
-          lines = [f'{d.metadata[\"Name\"]}=={d.metadata[\"Version\"]}' for d in dists]
+          lines = [f'{d.metadata[\"Name\"]}=={d.metadata[\"Version\"]}' for d in dists
+                   if d.metadata.get('Name') and d.metadata.get('Version')]
           sys.stdout.write('\n'.join(lines) + '\n')
           " | grep -viE '^telemachy==' > /tmp/requirements-freeze.txt
           pip-audit -r /tmp/requirements-freeze.txt --skip-editable

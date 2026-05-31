@@ -25,9 +25,30 @@ WorkflowExecutor
     ├── AgamemnonClient  →  POST /v1/agents/{id}/start   (start agents)
     ├── AgamemnonClient  →  POST /v1/teams               (create teams)
     ├── AgamemnonClient  →  POST /v1/teams/{id}/tasks    (create tasks)
-    ├── NATS subscriber  →  monitor task completion events  (planned — not yet implemented)
     └── AgamemnonClient  →  DELETE /v1/agents/{id}       (teardown)
 ```
+
+_Planned (issue #92): a NATS subscriber consuming Agamemnon task-lifecycle events will
+replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
+
+## Implementation Status
+
+✅ Implemented
+
+- HTTP polling for task completion — `WorkflowExecutor._monitor_completion`
+  (`src/telemachy/executor.py:311`), bounded by `settings.monitor_timeout_seconds`
+  and `settings.monitor_max_polls`.
+- HTTP polling for `blocked_by` dependency unblock inside
+  `_assign_tasks` (`src/telemachy/executor.py` ~283-292).
+- TLS scheme validation on `AGAMEMNON_URL` and `NATS_URL` in
+  `AgamemnonClient.__init__` when `REQUIRE_TLS=true`
+  (`src/telemachy/agamemnon_client.py:49-61`).
+
+📋 Planned (tracked under #92)
+
+- NATS subscriber consuming Agamemnon task-lifecycle events.
+- Replacement of `_monitor_completion`'s polling loop with event-driven
+  completion detection.
 
 ### Key Components
 
@@ -70,8 +91,9 @@ teardown: on_completion | on_failure | never
 2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
 4. **Dependency-respecting** — tasks with `blocked_by` are not submitted until their predecessors complete.
-5. **Observable** — all state transitions are logged; completion is currently detected by HTTP
-   polling against Agamemnon (NATS event-driven completion is planned).
+5. **Observable** — all state transitions are logged. Task completion is detected by HTTP
+   polling against Agamemnon's REST API in `_monitor_completion`; NATS event-driven
+   monitoring is planned under #92 and not yet wired up.
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
 ## Repository Structure
@@ -103,7 +125,7 @@ ProjectTelemachy/
 ## Development Guidelines
 
 - All Python files must have type hints on all functions and class attributes.
-- Use `async`/`await` throughout for I/O operations (HTTP, NATS).
+- Use `async`/`await` throughout for I/O operations (HTTP today; NATS once the subscriber lands under #92).
 - Use `httpx.AsyncClient` for all HTTP calls; never `requests`.
 - Pydantic v2 models for all structured data.
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
@@ -155,7 +177,7 @@ just format                        # ruff format
 | --- | --- | --- |
 | `AGAMEMNON_URL` | `http://localhost:8080` | ProjectAgamemnon base URL |
 | `AGAMEMNON_API_KEY` | `` | API key (if auth enabled) |
-| `NATS_URL` | `nats://localhost:4222` | NATS server URL for event monitoring |
+| `NATS_URL` | `nats://localhost:4222` | NATS server URL. Forwarded to `AgamemnonClient` and validated against `tls://` scheme when `REQUIRE_TLS=true`. **Not yet used to subscribe to events** — reserved for the planned NATS subscriber (#92). |
 | `WORKFLOWS_DIR` | `workflows` | Directory to search for workflow YAML files |
 | `HOST_ID` | `hermes` | Host identifier embedded in Agamemnon task assignments |
 | `REQUIRE_TLS` | `false` | Reject non-TLS Agamemnon connections when `true` |
