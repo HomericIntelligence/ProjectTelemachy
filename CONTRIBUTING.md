@@ -243,6 +243,16 @@ Include: clear title, steps to reproduce, expected vs actual behavior, workflow 
 **Do not open public issues for security vulnerabilities.**
 See [SECURITY.md](SECURITY.md) for the responsible disclosure process.
 
+## Adding or upgrading a runtime dependency
+
+1. Add the dependency to `pixi.toml` `[pypi-dependencies]` with a
+   `>=<lower-bound>` constraint (never `*`).
+2. Run `pixi install` to regenerate `pixi.lock`; commit both files.
+3. Update `docs/license-audit.md` with the dependency's declared
+   license and a yes/no compatibility decision against BSD-3-Clause.
+4. Run `pixi run license-audit` and confirm the printed table
+   matches the Findings section of `docs/license-audit.md`.
+
 ## Code of Conduct
 
 Please review our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
