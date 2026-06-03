@@ -162,18 +162,12 @@ just run <WORKFLOW>
 # Preview execution plan (dry run)
 just plan <WORKFLOW>
 
-# Check workflow status
-just status <WORKFLOW_ID>
-
-# List all workflows
-just list
-
-# Cancel a running workflow
-just cancel <WORKFLOW_ID>
-
 # Validate workflow YAML
 just validate <WORKFLOW>
 ```
+
+> `status`, `list`, and `cancel` are not yet implemented — see the
+> "Planned Features" section in [CLAUDE.md](./CLAUDE.md).
 
 ### Python Conventions
 

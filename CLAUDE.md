@@ -163,13 +163,18 @@ open an issue describing the conflict before proceeding.
 just run workflows/example.yaml    # execute a workflow
 just plan workflows/example.yaml   # dry-run: print what would be created
 just validate workflows/example.yaml  # validate YAML schema only
-just status <workflow-id>          # show running workflow status
-just list                          # list all workflows
-just cancel <workflow-id>          # cancel a running workflow
 just test                          # run pytest
 just lint                          # ruff check
 just format                        # ruff format
 ```
+
+## Planned Features
+
+`status`, `list`, and `cancel` commands are not yet implemented. They
+require a persistent workflow-state backend (no design selected yet —
+not covered by #92, which scopes NATS event ingestion only). Until a
+state backend lands, query ProjectAgamemnon directly for live agent and
+team status.
 
 ## Environment Variables
 

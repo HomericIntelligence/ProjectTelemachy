@@ -20,21 +20,6 @@ plan WORKFLOW:
     AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
         pixi run python -m telemachy.cli plan "{{WORKFLOW}}"
 
-# Show status of a running workflow
-status WORKFLOW_ID:
-    AGAMEMNON_URL={{AGAMEMNON_URL}} \
-        pixi run python -m telemachy.cli status "{{WORKFLOW_ID}}"
-
-# List all workflows (running and completed)
-list:
-    AGAMEMNON_URL={{AGAMEMNON_URL}} \
-        pixi run python -m telemachy.cli list
-
-# Cancel a running workflow
-cancel WORKFLOW_ID:
-    AGAMEMNON_URL={{AGAMEMNON_URL}} \
-        pixi run python -m telemachy.cli cancel "{{WORKFLOW_ID}}"
-
 # Validate a workflow YAML without executing
 validate WORKFLOW:
     pixi run python -m telemachy.cli validate "{{WORKFLOW}}"
