@@ -130,6 +130,10 @@ ProjectTelemachy/
 - Pydantic v2 models for all structured data.
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
 - Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
+- CI enforces a minimum coverage of **75%** via `--cov-fail-under=75` on
+  the `Test (pytest)` step in `.github/workflows/ci.yml`. Measured
+  baseline at the time of the gate's introduction was 78%. Raise the
+  floor in a follow-up PR once coverage rises and stabilises.
 
 ## Agent Guardrails
 
