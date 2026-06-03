@@ -18,10 +18,11 @@ rich              = ">=13.0"
 typer             = ">=0.12"
 
 [tasks]
-run    = "bash -c 'just run \"$@\"' --"
-test   = "just test"
-lint   = "just lint"
-format = "just format"
+run             = "bash -c 'just run \"$@\"' --"
+test            = "just test"
+lint            = "just lint"
+format          = "just format"
+license-audit   = "python -c \"import tomllib, pathlib; data = tomllib.loads(pathlib.Path('pixi.toml').read_text()); deps = data.get('pypi-dependencies', {}); print('Runtime [pypi-dependencies] (cross-check against docs/license-audit.md):'); [print(f'  {k} = {v!r}') for k, v in deps.items() if k != 'telemachy']\""
 
 [feature.dev.pypi-dependencies]
 pytest          = ">=8.0"

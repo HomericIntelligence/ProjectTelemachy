@@ -154,6 +154,10 @@ memory.
   `--no-verify` (it stalls on cold worktrees; document the bypass in the
   PR body).
 - **Never write to `pixi.lock` by hand;** regenerate via `pixi install`.
+- **Always re-run the license audit when adding or major-bumping a
+  runtime dependency.** Update `docs/license-audit.md` in the same
+  PR; re-run `pixi run license-audit` to print the current declared
+  set for cross-checking.
 - **Workflow YAML is a public API** — any change to required fields,
   default values, or schema constraints requires a `MINOR` (additive) or
   `MAJOR` (breaking) version bump per `docs/backwards-compat.md`.
