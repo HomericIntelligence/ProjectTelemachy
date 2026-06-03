@@ -1,7 +1,7 @@
 # Releasing ProjectTelemachy
 
-This document describes the **manual** release process for
-ProjectTelemachy. Automation is tracked in the issue backlog.
+This document describes the release process for ProjectTelemachy.
+Most steps are automated by `.github/workflows/release.yml`.
 
 ## Version sources of truth
 
@@ -43,10 +43,36 @@ breaking changes in any `MINOR` bump; operators should pin a specific
      `## [X.Y.Z] - YYYY-MM-DD`.
    - Add a fresh empty `## [Unreleased]` block above.
 4. Open a PR titled `chore(release): X.Y.Z`.
-5. After squash-merge, create an annotated git tag on the squash commit:
-   `git tag -a vX.Y.Z -m "Release X.Y.Z"` and push it.
-6. Create a matching GitHub Release referencing the `CHANGELOG.md` entry.
-7. Announce the release in the Odysseus integration channel.
+5. After squash-merge, create an annotated git tag on the squash commit
+   and push it:
+
+   ```bash
+   git tag -a vX.Y.Z -m "Release X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+6. The `.github/workflows/release.yml` workflow runs automatically on the
+   tag push: it cross-checks the tag against `pyproject.toml` and
+   `src/telemachy/__init__.py`, builds the sdist+wheel, creates a GitHub
+   Release (body sliced from the matching `## [X.Y.Z]` block in
+   `CHANGELOG.md`) with both artifacts attached, and publishes to PyPI
+   via Trusted Publishing (OIDC).
+7. If the release workflow fails, do **not** delete and re-push the tag.
+   Land a fix on `main`, bump to the next `PATCH`, and tag that.
+8. Announce the release in the Odysseus integration channel.
+
+## Automation
+
+- Workflow: `.github/workflows/release.yml` (triggered on `v*.*.*` tag push).
+- PyPI binding: the `telemachy` project on PyPI must have a Trusted
+  Publisher configured for `HomericIntelligence/ProjectTelemachy`,
+  workflow file `release.yml`, environment `pypi`. Configure once at
+  <https://pypi.org/manage/account/publishing/>. Until this is configured,
+  the `pypi-publish` job will fail with an OIDC token-exchange error —
+  which is the intended fail-loud behaviour, not a silent skip.
+- All third-party actions in the workflow are pinned by 40-char commit
+  SHA; bumping a pin requires re-resolving via
+  `gh api repos/<owner>/<repo>/git/refs/tags/<tag>`.
 
 ## Who approves
 
