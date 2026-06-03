@@ -1,0 +1,10 @@
+{
+  "follow_ups": [
+    {
+      "category": "core",
+      "title": "Replace deprecated asyncio.iscoroutinefunction with inspect",
+      "body": "executor.py:75 uses asyncio.iscoroutinefunction which is deprecated as of Python 3.14 and will be removed in 3.16. Replace with inspect.iscoroutinefunction() per deprecation warning shown in test output."
+    }
+  ],
+  "rejected": []
+}
