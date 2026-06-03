@@ -27,15 +27,12 @@ just plan workflows/example.yaml
 
 # Validate a workflow file
 just validate workflows/example.yaml
-
-# Check status of a running workflow
-just status <workflow-id>
 ```
 
-> **Note:** `status`, `list`, and `cancel` are currently stubs. They print a
-> placeholder message because persistent workflow-state storage is not yet
-> implemented. Until a state backend lands, query ProjectAgamemnon directly
-> for live agent and team status.
+> **Note:** `status`, `list`, and `cancel` subcommands are not yet
+> implemented — persistent workflow-state storage is out of scope for
+> the current release. Until a state backend lands, query
+> ProjectAgamemnon directly for live agent and team status.
 
 ## Workflow Schema
 

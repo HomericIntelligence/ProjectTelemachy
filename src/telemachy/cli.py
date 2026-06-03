@@ -214,48 +214,6 @@ def validate(
 
 
 @app.command()
-def status(
-    workflow_id: Annotated[str, typer.Argument(help="Workflow ID returned by 'run'")],
-) -> None:
-    """Show the status of a running or completed workflow.
-
-    Note: persistent state storage is not yet implemented.
-    This command is a placeholder for future state backend integration.
-    """
-    console.print(
-        f"[yellow]Status lookup for workflow '{workflow_id}' requires a state backend.[/yellow]\n"
-        "Persistent workflow state storage is not yet implemented.\n"
-        "Check ProjectAgamemnon directly for agent/team status."
-    )
-
-
-@app.command(name="list")
-def list_workflows() -> None:
-    """List all workflows (running and completed).
-
-    Note: persistent state storage is not yet implemented.
-    """
-    console.print(
-        "[yellow]Workflow listing requires a state backend.[/yellow]\n"
-        "Persistent workflow state storage is not yet implemented."
-    )
-
-
-@app.command()
-def cancel(
-    workflow_id: Annotated[str, typer.Argument(help="Workflow ID to cancel")],
-) -> None:
-    """Cancel a running workflow.
-
-    Note: cancellation via state backend is not yet implemented.
-    """
-    console.print(
-        f"[yellow]Cancellation of workflow '{workflow_id}' requires a state backend.[/yellow]\n"
-        "Persistent workflow state storage is not yet implemented."
-    )
-
-
-@app.command()
 def schema(
     output: Path = typer.Option(  # noqa: B008
         Path("schemas/workflow-v1.json"),
