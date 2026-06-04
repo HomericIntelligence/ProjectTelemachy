@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 import uuid
@@ -69,7 +70,7 @@ class WorkflowExecutor:
     async def _emit(self, event: str, **kwargs: Any) -> None:
         """Fire all callbacks registered for *event*."""
         for cb in self._hooks.get(event, []):
-            if asyncio.iscoroutinefunction(cb):
+            if inspect.iscoroutinefunction(cb):
                 await cb(**kwargs)
             else:
                 cb(**kwargs)

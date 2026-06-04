@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -438,6 +439,42 @@ class TestHooks:
 
         assert sync_calls == [{"subject": "T1", "status": "completed"}]
         assert async_calls == [{"subject": "T1", "status": "completed"}]
+
+    @pytest.mark.asyncio
+    async def test_emit_uses_inspect_iscoroutinefunction(self, monkeypatch) -> None:
+        """Lock in the #256 migration: _emit must dispatch via inspect, not asyncio."""
+        import inspect as _inspect
+
+        from telemachy import executor as executor_mod
+
+        calls: list[Callable[..., object]] = []
+        real = _inspect.iscoroutinefunction
+
+        def spy(cb: Callable[..., object]) -> bool:
+            calls.append(cb)
+            return real(cb)
+
+        monkeypatch.setattr(executor_mod.inspect, "iscoroutinefunction", spy)
+
+        sync_called = False
+        async_called = False
+
+        def sync_cb(**_: object) -> None:
+            nonlocal sync_called
+            sync_called = True
+
+        async def async_cb(**_: object) -> None:
+            nonlocal async_called
+            async_called = True
+
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        executor.add_hook("on_task_complete", sync_cb)
+        executor.add_hook("on_task_complete", async_cb)
+        await executor._emit("on_task_complete", subject="T1", status="completed")
+
+        assert sync_called and async_called
+        assert sync_cb in calls and async_cb in calls
 
 
 # ---------------------------------------------------------------------------
