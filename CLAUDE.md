@@ -184,6 +184,14 @@ not covered by #92, which scopes NATS event ingestion only). Until a
 state backend lands, query ProjectAgamemnon directly for live agent and
 team status.
 
+## Testing layers
+
+- `just test` — full suite (unit + integration); this is what CI runs
+- `just test-unit` — unit tests only; mocks `AgamemnonClient` at the method level
+- `just test-integration` — integration tests under `tests/integration/`; exercises `WorkflowExecutor` against an in-process mock Agamemnon HTTP server (`respx`)
+
+Integration tests must declare `pytestmark = [pytest.mark.integration, pytest.mark.asyncio]` at the top of each module.
+
 ## Environment Variables
 
 | Variable | Default | Description |
