@@ -1,15 +1,14 @@
 # ProjectTelemachy
 
 A declarative workflow engine for [ProjectAgamemnon](https://github.com/HomericIntelligence/ProjectAgamemnon).
-Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, completion monitoring,
+Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, event monitoring,
 and teardown via the Agamemnon REST API.
 
 ## Overview
 
-Telemachy reads a workflow YAML file, creates agents and teams through ProjectAgamemnon,
-assigns tasks with dependency ordering, monitors task completion by polling the Agamemnon
-REST API (event-driven NATS monitoring is planned — see issue #92), and tears down
-provisioned resources according to your policy.
+Telemachy reads a workflow YAML file, creates agents and teams through ProjectAgamemnon, assigns tasks
+with dependency ordering, monitors task completion via HTTP polling (event-driven NATS monitoring is
+planned — see issue #92), and tears down provisioned resources according to your policy.
 
 No separate agent system is used. All execution is driven exclusively through ProjectAgamemnon.
 
@@ -28,12 +27,15 @@ just plan workflows/example.yaml
 
 # Validate a workflow file
 just validate workflows/example.yaml
+
+# Check status of a running workflow
+just status <workflow-id>
 ```
 
-> **Note:** `status`, `list`, and `cancel` subcommands are not yet
-> implemented — persistent workflow-state storage is out of scope for
-> the current release. Until a state backend lands, query
-> ProjectAgamemnon directly for live agent and team status.
+> **Note:** `status`, `list`, and `cancel` are currently stubs. They print a
+> placeholder message because persistent workflow-state storage is not yet
+> implemented. Until a state backend lands, query ProjectAgamemnon directly
+> for live agent and team status.
 
 ## Workflow Schema
 

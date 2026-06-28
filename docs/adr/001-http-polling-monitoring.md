@@ -1,6 +1,6 @@
 # ADR-001: Monitor workflow completion via HTTP polling
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-05-16
 - **Deciders:** ProjectTelemachy maintainers
 - **Context tags:** monitoring, NATS, executor
@@ -22,9 +22,9 @@ Two approaches were available:
    already required for provisioning, so no new infrastructure or library
    needs to be wired up.
 
-`CLAUDE.md` describes NATS as "planned but not yet wired up"; `nats-py`
-is declared as a dependency but not imported. The initial implementation
-chose HTTP polling.
+`CLAUDE.md` describes NATS as planned (issue #92); no NATS dependency or
+configuration exists in the repo today. The initial implementation chose
+HTTP polling and that choice now stands.
 
 ## Decision
 

@@ -5,7 +5,7 @@
 ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the
 ProjectAgamemnon REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and
 teams via Agamemnon, assigns tasks with dependency ordering, monitors execution by polling
-Agamemnon's REST API (NATS-based event monitoring is planned but not yet wired up), and
+Agamemnon's REST API (NATS-based event monitoring is planned — see issue #92), and
 tears down resources according to the workflow's teardown policy.
 
 **This project uses ProjectAgamemnon exclusively as its execution backend.**
@@ -25,30 +25,9 @@ WorkflowExecutor
     ├── AgamemnonClient  →  POST /v1/agents/{id}/start   (start agents)
     ├── AgamemnonClient  →  POST /v1/teams               (create teams)
     ├── AgamemnonClient  →  POST /v1/teams/{id}/tasks    (create tasks)
+    ├── NATS subscriber  →  monitor task completion events  (planned — not yet implemented)
     └── AgamemnonClient  →  DELETE /v1/agents/{id}       (teardown)
 ```
-
-_Planned (issue #92): a NATS subscriber consuming Agamemnon task-lifecycle events will
-replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
-
-## Implementation Status
-
-✅ Implemented
-
-- HTTP polling for task completion — `WorkflowExecutor._monitor_completion`
-  (`src/telemachy/executor.py:311`), bounded by `settings.monitor_timeout_seconds`
-  and `settings.monitor_max_polls`.
-- HTTP polling for `blocked_by` dependency unblock inside
-  `_assign_tasks` (`src/telemachy/executor.py` ~283-292).
-- TLS scheme validation on `AGAMEMNON_URL` and `NATS_URL` in
-  `AgamemnonClient.__init__` when `REQUIRE_TLS=true`
-  (`src/telemachy/agamemnon_client.py:49-61`).
-
-📋 Planned (tracked under #92)
-
-- NATS subscriber consuming Agamemnon task-lifecycle events.
-- Replacement of `_monitor_completion`'s polling loop with event-driven
-  completion detection.
 
 ### Key Components
 
@@ -91,9 +70,8 @@ teardown: on_completion | on_failure | never
 2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
 4. **Dependency-respecting** — tasks with `blocked_by` are not submitted until their predecessors complete.
-5. **Observable** — all state transitions are logged. Task completion is detected by HTTP
-   polling against Agamemnon's REST API in `_monitor_completion`; NATS event-driven
-   monitoring is planned under #92 and not yet wired up.
+5. **Observable** — all state transitions are logged; completion is currently detected by HTTP
+   polling against Agamemnon (NATS event-driven completion is planned).
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
 ## Repository Structure
@@ -125,15 +103,11 @@ ProjectTelemachy/
 ## Development Guidelines
 
 - All Python files must have type hints on all functions and class attributes.
-- Use `async`/`await` throughout for I/O operations (HTTP today; NATS once the subscriber lands under #92).
+- Use `async`/`await` throughout for I/O operations (HTTP today; future NATS work is tracked under #92).
 - Use `httpx.AsyncClient` for all HTTP calls; never `requests`.
 - Pydantic v2 models for all structured data.
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
 - Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
-- CI enforces a minimum coverage of **75%** via `--cov-fail-under=75` on
-  the `Test (pytest)` step in `.github/workflows/ci.yml`. Measured
-  baseline at the time of the gate's introduction was 78%. Raise the
-  floor in a follow-up PR once coverage rises and stabilises.
 
 ## Agent Guardrails
 
@@ -154,10 +128,6 @@ memory.
   `--no-verify` (it stalls on cold worktrees; document the bypass in the
   PR body).
 - **Never write to `pixi.lock` by hand;** regenerate via `pixi install`.
-- **Always re-run the license audit when adding or major-bumping a
-  runtime dependency.** Update `docs/license-audit.md` in the same
-  PR; re-run `pixi run license-audit` to print the current declared
-  set for cross-checking.
 - **Workflow YAML is a public API** — any change to required fields,
   default values, or schema constraints requires a `MINOR` (additive) or
   `MAJOR` (breaking) version bump per `docs/backwards-compat.md`.
@@ -171,18 +141,13 @@ open an issue describing the conflict before proceeding.
 just run workflows/example.yaml    # execute a workflow
 just plan workflows/example.yaml   # dry-run: print what would be created
 just validate workflows/example.yaml  # validate YAML schema only
+just status <workflow-id>          # show running workflow status
+just list                          # list all workflows
+just cancel <workflow-id>          # cancel a running workflow
 just test                          # run pytest
 just lint                          # ruff check
 just format                        # ruff format
 ```
-
-## Planned Features
-
-`status`, `list`, and `cancel` commands are not yet implemented. They
-require a persistent workflow-state backend (no design selected yet —
-not covered by #92, which scopes NATS event ingestion only). Until a
-state backend lands, query ProjectAgamemnon directly for live agent and
-team status.
 
 ## Environment Variables
 
@@ -190,10 +155,9 @@ team status.
 | --- | --- | --- |
 | `AGAMEMNON_URL` | `http://localhost:8080` | ProjectAgamemnon base URL |
 | `AGAMEMNON_API_KEY` | `` | API key (if auth enabled) |
-| `NATS_URL` | `nats://localhost:4222` | NATS server URL. Forwarded to `AgamemnonClient` and validated against `tls://` scheme when `REQUIRE_TLS=true`. **Not yet used to subscribe to events** — reserved for the planned NATS subscriber (#92). |
 | `WORKFLOWS_DIR` | `workflows` | Directory to search for workflow YAML files |
 | `HOST_ID` | `hermes` | Host identifier embedded in Agamemnon task assignments |
-| `REQUIRE_TLS` | `true` | Reject non-TLS Agamemnon connections. Set to `false` to allow cleartext for local dev (logs a WARNING). |
+| `REQUIRE_TLS` | `true` | Reject non-TLS Agamemnon connections when `true` |
 | `LOG_LEVEL` | `INFO` | Python logging level (DEBUG, INFO, WARNING, ERROR) |
 | `MONITOR_TIMEOUT_SECONDS` | `3600` | Seconds before workflow monitor times out |
 | `MONITOR_MAX_POLLS` | `7200` | Maximum polling attempts for workflow monitor |

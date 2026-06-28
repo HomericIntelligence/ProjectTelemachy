@@ -43,22 +43,14 @@ class AgamemnonClient:
         url: str,
         api_key: str = "",
         host_id: str = "hermes",
-        require_tls: bool = False,
-        nats_url: str = "",
+        require_tls: bool = True,
     ) -> None:
-        if require_tls:
-            if not url.startswith("https://"):
-                raise AgamemnonError(
-                    0,
-                    "TLS required (REQUIRE_TLS=true) but AGAMEMNON_URL uses plain HTTP. "
-                    "Use https:// or set REQUIRE_TLS=false.",
-                )
-            if nats_url and not nats_url.startswith("tls://"):
-                raise AgamemnonError(
-                    0,
-                    "TLS required (REQUIRE_TLS=true) but NATS_URL uses plain nats://. "
-                    "Use tls:// or set REQUIRE_TLS=false.",
-                )
+        if require_tls and not url.startswith("https://"):
+            raise AgamemnonError(
+                0,
+                "TLS required (REQUIRE_TLS=true) but AGAMEMNON_URL uses plain HTTP. "
+                "Use https:// or set REQUIRE_TLS=false.",
+            )
         self._base_url = url.rstrip("/")
         self._host_id = host_id
         headers: dict[str, str] = {"Content-Type": "application/json"}

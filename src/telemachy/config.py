@@ -19,7 +19,6 @@ class AgamemnonClientKwargs(TypedDict):
     api_key: str
     host_id: str
     require_tls: bool
-    nats_url: str
 
 
 class Settings(BaseSettings):
@@ -33,7 +32,6 @@ class Settings(BaseSettings):
 
     agamemnon_url: str = "http://localhost:8080"
     agamemnon_api_key: str = ""
-    nats_url: str = "nats://localhost:4222"
     workflows_dir: Path = Path("workflows")
     host_id: str = "hermes"
     require_tls: bool = True
@@ -63,7 +61,6 @@ class Settings(BaseSettings):
             "api_key": self.agamemnon_api_key,
             "host_id": self.host_id,
             "require_tls": self.require_tls,
-            "nats_url": self.nats_url,
         }
 
 

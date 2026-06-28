@@ -30,6 +30,9 @@ def _local_agent_spec(name: str = "worker") -> AgentSpec:
 
 async def _enter_client(url: str = "http://localhost:8080", **kwargs: object) -> AgamemnonClient:
     """Return an AgamemnonClient that has been entered as async context manager."""
+    # Default to require_tls=False for local dev testing; can be overridden in kwargs
+    if "require_tls" not in kwargs:
+        kwargs["require_tls"] = False
     client = AgamemnonClient(url=url, **kwargs)  # type: ignore[arg-type]
     # Manually install a real-ish AsyncClient so _http property works
     import httpx

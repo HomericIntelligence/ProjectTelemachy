@@ -32,7 +32,7 @@ off (see "Handoff" below).
 | ProjectAgamemnon | agent / team / task lifecycle, HMAS orchestration | parse workflow YAML |
 | ProjectNestor | research and ideation upstream | execute workflows |
 | ProjectArgus | observability, log aggregation | mutate state in Agamemnon |
-| ProjectHermes | NATS event bridge | own agent lifecycle |
+| ProjectHermes | Event bridge (NATS) | own agent lifecycle |
 
 ## Handoff contract
 
@@ -48,9 +48,9 @@ off (see "Handoff" below).
 
 - All Agamemnon HTTP calls use `httpx.AsyncClient`; payloads conform to
   ProjectAgamemnon's published OpenAPI shape.
-- Future NATS-based completion monitoring will subscribe to subjects
-  documented in Odysseus `docs/adr/005-nats-subject-schema.md`. Until
-  that lands Telemachy polls Agamemnon via HTTP.
+- Completion monitoring is performed by HTTP polling against the
+  Agamemnon REST API. Future event-driven monitoring is tracked under
+  issue #92.
 
 ## Coordination invariants
 
@@ -67,4 +67,3 @@ off (see "Handoff" below).
 
 - `CLAUDE.md` — single-agent operational conventions and guardrails.
 - `CONTRIBUTING.md` — contribution workflow.
-- Odysseus `docs/adr/005-nats-subject-schema.md`.

@@ -16,7 +16,7 @@ significant architectural choice was made.
 
 | Number | Title | Status |
 | --- | --- | --- |
-| 001 | Monitoring via HTTP polling instead of NATS events | Proposed |
+| 001 | Monitoring via HTTP polling instead of NATS events | Accepted |
 | 002 | Decouple from ai-maestro (use Agamemnon exclusively) | Accepted |
 
 ## See also

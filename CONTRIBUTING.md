@@ -3,7 +3,8 @@
 Thank you for your interest in contributing to ProjectTelemachy! This is the workflow
 execution engine for the [HomericIntelligence](https://github.com/HomericIntelligence)
 distributed agent mesh — it runs, plans, monitors, and cancels named workflow YAML files
-against Agamemnon's REST API. (A NATS-based event channel is planned — see issue #92 — but is not yet wired up.)
+against Agamemnon's REST API. Event-driven NATS monitoring is tracked
+under issue #92.
 
 For an overview of the full ecosystem, see the
 [Odysseus](https://github.com/HomericIntelligence/Odysseus) meta-repo.
@@ -66,8 +67,8 @@ just validate <WORKFLOW>
 
 Workflow definitions live in the `workflows/` directory. Reference existing workflows as
 examples for the expected schema. Workflows define steps that execute against the
-Agamemnon REST API. Inter-agent NATS messaging is part of the planned event-monitoring
-work (#92) and is not currently used by the engine.
+Agamemnon REST API. Event-driven NATS monitoring is tracked under
+issue #92.
 
 ## Development Workflow
 
@@ -162,12 +163,18 @@ just run <WORKFLOW>
 # Preview execution plan (dry run)
 just plan <WORKFLOW>
 
+# Check workflow status
+just status <WORKFLOW_ID>
+
+# List all workflows
+just list
+
+# Cancel a running workflow
+just cancel <WORKFLOW_ID>
+
 # Validate workflow YAML
 just validate <WORKFLOW>
 ```
-
-> `status`, `list`, and `cancel` are not yet implemented — see the
-> "Planned Features" section in [CLAUDE.md](./CLAUDE.md).
 
 ### Python Conventions
 
@@ -237,16 +244,6 @@ Include: clear title, steps to reproduce, expected vs actual behavior, workflow 
 
 **Do not open public issues for security vulnerabilities.**
 See [SECURITY.md](SECURITY.md) for the responsible disclosure process.
-
-## Adding or upgrading a runtime dependency
-
-1. Add the dependency to `pixi.toml` `[pypi-dependencies]` with a
-   `>=<lower-bound>` constraint (never `*`).
-2. Run `pixi install` to regenerate `pixi.lock`; commit both files.
-3. Update `docs/license-audit.md` with the dependency's declared
-   license and a yes/no compatibility decision against BSD-3-Clause.
-4. Run `pixi run license-audit` and confirm the printed table
-   matches the Findings section of `docs/license-audit.md`.
 
 ## Code of Conduct
 

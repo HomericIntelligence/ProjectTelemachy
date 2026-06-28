@@ -1,7 +1,6 @@
 # === Variables ===
 
 AGAMEMNON_URL := env_var_or_default("AGAMEMNON_URL", "http://localhost:8080")
-NATS_URL      := env_var_or_default("NATS_URL", "nats://localhost:4222")
 
 # === Default ===
 
@@ -12,12 +11,12 @@ default:
 
 # Execute a workflow YAML file
 run WORKFLOW:
-    AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} \
         pixi run python -m telemachy.cli run "{{WORKFLOW}}"
 
 # Dry-run: show what would be created without executing
 plan WORKFLOW:
-    AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
+    AGAMEMNON_URL={{AGAMEMNON_URL}} \
         pixi run python -m telemachy.cli plan "{{WORKFLOW}}"
 
 # Validate a workflow YAML without executing

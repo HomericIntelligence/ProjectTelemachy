@@ -97,13 +97,12 @@ When you report a vulnerability:
 
 - Python workflow engine source code (`src/telemachy/`)
 - Workflow YAML definitions (`workflows/`)
-- Agamemnon and NATS integration logic
+- Agamemnon integration logic
 - Justfile recipes
 
 ### Out of Scope
 
 - ProjectAgamemnon API (report to [ProjectAgamemnon](https://github.com/HomericIntelligence/ProjectAgamemnon))
-- NATS server (report to [nats-io](https://github.com/nats-io))
 - Other HomericIntelligence submodule repos (report to that repo directly)
 - Social engineering attacks
 - Physical security
@@ -115,7 +114,7 @@ When contributing to ProjectTelemachy:
 - Validate workflow YAML schemas before execution
 - Sanitize workflow parameters and step inputs
 - Never embed credentials in workflow definitions — use environment variables
-- Use environment variables for NATS and Agamemnon connection details
+- Use environment variables for Agamemnon connection details
 - Restrict executable commands in workflow steps
 
 ## Contact
