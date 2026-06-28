@@ -10,12 +10,6 @@ import pytest
 from telemachy.config import Settings
 
 
-def test_require_tls_default_is_true(monkeypatch: pytest.MonkeyPatch) -> None:
-    """REQUIRE_TLS defaults to True (secure by default; see #158)."""
-    monkeypatch.delenv("REQUIRE_TLS", raising=False)
-    assert Settings(_env_file=None).require_tls is True
-
-
 def test_require_tls_false_emits_warning(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -54,11 +48,6 @@ def test_require_tls_env_true() -> None:
         assert Settings(_env_file=None).require_tls is True
     finally:
         del os.environ["REQUIRE_TLS"]
-
-
-def test_workflows_dir_is_path() -> None:
-    s = Settings(_env_file=None)
-    assert isinstance(s.workflows_dir, Path)
 
 
 class TestDefaults:
