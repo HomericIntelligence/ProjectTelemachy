@@ -129,6 +129,14 @@ def run(
         bool,
         typer.Option("--dry-run/--no-dry-run", help="Simulate execution without calling Agamemnon"),
     ] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force/--no-force",
+            help="Bypass idempotency lookup and create fresh agents/teams. "
+            "Pre-existing tlm-* resources from prior runs are NOT deleted.",
+        ),
+    ] = False,
 ) -> None:
     """Execute a workflow YAML file."""
     _validate_workflow_path(workflow_path)
@@ -137,7 +145,7 @@ def run(
     if dry_run:
         console.print(f"[bold yellow][dry-run][/bold yellow] Simulating workflow: {spec.name}")
         _print_plan(spec)
-        state = asyncio.run(run_workflow(spec, dry_run=True))
+        state = asyncio.run(run_workflow(spec, dry_run=True, force=force))
         console.print(
             f"[bold yellow][dry-run][/bold yellow] Simulation complete. id={state.workflow_id}"
         )
@@ -149,6 +157,8 @@ def run(
     total_tasks = sum(len(team.tasks) for team in spec.teams)
 
     async def _run_with_signals() -> None:
+        from telemachy.idempotency import make_key
+
         stop_event = asyncio.Event()
         completed_count = 0
 
@@ -185,7 +195,33 @@ def run(
                 )
 
             async with AgamemnonClient(**settings.client_kwargs()) as client:
-                executor = WorkflowExecutor(client, stop_event=stop_event)
+                # Take ONE snapshot, use it for both the --force warning AND
+                # the executor's lookup tables (avoid two round-trips).
+                snapshot: tuple[list, list] | None = None
+                if not force:
+                    snapshot = (await client.list_agents(), await client.list_teams())
+                else:
+                    agents_now = await client.list_agents()
+                    teams_now = await client.list_teams()
+                    expected = {make_key(spec.name, a.name) for a in spec.agents} | {
+                        make_key(spec.name, t.name) for t in spec.teams
+                    }
+                    matched = [a for a in agents_now if str(a.get("name", "")) in expected]
+                    matched += [t for t in teams_now if str(t.get("name", "")) in expected]
+                    if matched:
+                        err_console.print(
+                            "[yellow]--force: bypassing idempotency; "
+                            f"{len(matched)} pre-existing tlm-* resource(s) for "
+                            f"workflow '{spec.name}' will be left behind. "
+                            "Clean up manually if desired.[/yellow]"
+                        )
+
+                executor = WorkflowExecutor(
+                    client,
+                    stop_event=stop_event,
+                    force=force,
+                    existing_snapshot=snapshot,
+                )
                 executor.add_hook("on_task_complete", _on_task_complete)
                 result = await executor.execute(spec)
 

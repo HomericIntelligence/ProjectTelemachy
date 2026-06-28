@@ -47,10 +47,12 @@ def _make_mock_client() -> MagicMock:
     client.hibernate_agent = AsyncMock()
     client.delete_agent = AsyncMock()
     client.list_agents = AsyncMock(return_value=[])
+    client.list_teams = AsyncMock(return_value=[])
     client.create_team = AsyncMock(return_value="team-id-001")
     client.create_task = AsyncMock(return_value="task-id-001")
     client.update_task = AsyncMock()
     client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "completed"}])
+    client.delete_team = AsyncMock()
     return client
 
 
@@ -525,3 +527,102 @@ class TestStopEvent:
 
         # Workflow finishes (not hangs) when stop event is set.
         assert state.completed_at is not None
+
+
+# ---------------------------------------------------------------------------
+# Tests: idempotency
+# ---------------------------------------------------------------------------
+
+
+class TestIdempotency:
+    @pytest.mark.asyncio
+    async def test_rerun_reuses_existing_agent(self) -> None:
+        from telemachy.idempotency import make_key
+
+        spec = _make_spec()
+        existing_key = make_key("test-wf", "worker")
+        client = _make_mock_client()
+        client.list_agents = AsyncMock(
+            return_value=[{"id": "preexisting-agent-id", "name": existing_key}]
+        )
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        state = await executor.execute(spec)
+        client.create_agent.assert_not_called()
+        assert state.created_agents["worker"] == "preexisting-agent-id"
+
+    @pytest.mark.asyncio
+    async def test_rerun_reuses_existing_team_and_task(self) -> None:
+        from telemachy.idempotency import make_key
+
+        spec = _make_spec()
+        team_key = make_key("test-wf", "team-a")
+        client = _make_mock_client()
+        client.list_teams = AsyncMock(
+            return_value=[{"id": "preexisting-team-id", "name": team_key}]
+        )
+        client.get_tasks = AsyncMock(
+            return_value=[
+                {"id": "preexisting-task-id", "subject": "Task 1", "status": "completed"},
+            ]
+        )
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        await executor.execute(spec)
+        client.create_team.assert_not_called()
+        client.create_task.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_force_bypasses_idempotency(self) -> None:
+        from telemachy.idempotency import make_key
+
+        spec = _make_spec()
+        existing_key = make_key("test-wf", "worker")
+        client = _make_mock_client()
+        client.list_agents = AsyncMock(return_value=[{"id": "old-agent", "name": existing_key}])
+        executor = WorkflowExecutor(client, poll_interval=0.01, force=True)
+        state = await executor.execute(spec)
+        client.create_agent.assert_called_once()
+        assert state.created_agents["worker"] == "agent-id-001"
+
+    @pytest.mark.asyncio
+    async def test_partial_prior_run_completes_missing_resources(self) -> None:
+        from telemachy.idempotency import make_key
+
+        spec = _make_spec()
+        client = _make_mock_client()
+        client.list_agents = AsyncMock(
+            return_value=[{"id": "reused-agent", "name": make_key("test-wf", "worker")}]
+        )
+        await WorkflowExecutor(client, poll_interval=0.01).execute(spec)
+        client.create_agent.assert_not_called()
+        client.create_team.assert_called_once()
+        assert client.create_team.call_args.args[0] == make_key("test-wf", "team-a")
+
+    @pytest.mark.asyncio
+    async def test_reuse_tolerates_already_running_agent(self) -> None:
+        from telemachy.idempotency import make_key
+
+        spec = _make_spec()
+        client = _make_mock_client()
+        client.list_agents = AsyncMock(
+            return_value=[{"id": "reused-agent", "name": make_key("test-wf", "worker")}]
+        )
+        # wake_agent raises a 409-shaped conflict on the reused agent
+        client.wake_agent = AsyncMock(side_effect=AgamemnonError(409, "agent is already running"))
+        # Must NOT raise; reuse continues.
+        state = await WorkflowExecutor(client, poll_interval=0.01).execute(spec)
+        assert state.status == "completed"
+        assert state.created_agents["worker"] == "reused-agent"
+
+    @pytest.mark.asyncio
+    async def test_reuse_propagates_non_conflict_wake_error(self) -> None:
+        from telemachy.idempotency import make_key
+
+        spec = _make_spec(teardown="never")
+        client = _make_mock_client()
+        client.list_agents = AsyncMock(
+            return_value=[{"id": "reused-agent", "name": make_key("test-wf", "worker")}]
+        )
+        client.wake_agent = AsyncMock(side_effect=AgamemnonError(500, "internal error"))
+        state = await WorkflowExecutor(client, poll_interval=0.01).execute(spec)
+        assert state.status == "failed"
+        assert state.error is not None and "500" in state.error

@@ -201,3 +201,57 @@ def test_tls_enforcement_raises_on_http_url() -> None:
 
     assert exc_info.value.status_code == 0
     assert "TLS" in str(exc_info.value) or "https" in str(exc_info.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# TEST 8 — list_teams returns team list
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_teams_returns_team_list() -> None:
+    """list_teams should return a list of team dicts from /v1/teams."""
+    client = await _enter_client()
+    teams_resp = _make_response(
+        200,
+        {
+            "teams": [
+                {"id": "team-1", "name": "tlm-abc123-team-a"},
+                {"id": "team-2", "name": "tlm-def456-team-b"},
+            ]
+        },
+    )
+    teams_resp.is_error = False
+
+    mock_request = AsyncMock(return_value=teams_resp)
+    with patch.object(client._client, "request", mock_request):
+        teams = await client.list_teams()
+
+    assert len(teams) == 2
+    assert teams[0]["id"] == "team-1"
+    assert teams[1]["name"] == "tlm-def456-team-b"
+
+
+# ---------------------------------------------------------------------------
+# TEST 9 — create_agent with idempotency_name uses that name
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_agent_with_idempotency_name() -> None:
+    """create_agent with idempotency_name should POST that as the agent name."""
+    client = await _enter_client()
+    ok_resp = _make_response(201, {"agent": {"id": "agent-456"}})
+
+    mock_request = AsyncMock(return_value=ok_resp)
+    with patch.object(client._client, "request", mock_request):
+        agent_id = await client.create_agent(
+            _local_agent_spec(), idempotency_name="tlm-abc123-worker"
+        )
+
+    assert agent_id == "agent-456"
+    # Verify the request used the idempotency name
+    call_args = mock_request.call_args
+    assert call_args[1]["json"]["name"] == "tlm-abc123-worker"
+    # Verify label preserves the original name
+    assert call_args[1]["json"]["label"] == "worker"
