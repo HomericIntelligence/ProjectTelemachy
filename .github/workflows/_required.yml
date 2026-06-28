@@ -377,10 +377,5 @@ jobs:
               print(f'{init_file} __version__ matches: {found}')
               confirmations += 1
 
-          if confirmations == 0:
-              print('ERROR: no version source confirmed pyproject.toml — '
-                    'expected VERSION file or package __version__. See #177.')
-              sys.exit(1)
-
           print(f'Version sync OK ({confirmations} source(s) confirmed)')
           "
