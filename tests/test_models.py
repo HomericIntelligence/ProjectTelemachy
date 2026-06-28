@@ -2,63 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 import pytest
-import yaml
 
 from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec
-
-MINIMAL_WORKFLOW_YAML = """
-apiVersion: telemachy/v1
-metadata:
-  name: test-workflow
-  description: A minimal test workflow
-agents:
-  - name: worker
-    program: claude-code
-    runtime: local
-teams:
-  - name: team-a
-    agents:
-      - worker
-    tasks:
-      - subject: "Do the thing"
-        description: "Do something useful"
-        assign_to: worker
-teardown: on_completion
-"""
-
-TWO_TASK_DEP_YAML = """
-apiVersion: telemachy/v1
-metadata:
-  name: dep-workflow
-  description: Workflow with task dependency
-agents:
-  - name: agent-a
-    runtime: local
-  - name: agent-b
-    runtime: local
-teams:
-  - name: dep-team
-    agents:
-      - agent-a
-      - agent-b
-    tasks:
-      - subject: "Step 1"
-        description: "First step"
-        assign_to: agent-a
-      - subject: "Step 2"
-        description: "Second step, depends on Step 1"
-        assign_to: agent-b
-        blocked_by:
-          - "Step 1"
-teardown: on_completion
-"""
+from tests.conftest import make_agent_dict, make_two_task_dep_dict
 
 
 class TestWorkflowSpecParsing:
-    def test_minimal_workflow_parses(self) -> None:
-        raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
-        spec = WorkflowSpec.model_validate(raw)
+    def test_minimal_workflow_parses(
+        self, workflow_spec_factory: Callable[..., WorkflowSpec]
+    ) -> None:
+        spec = workflow_spec_factory()
         assert spec.name == "test-workflow"
         assert len(spec.agents) == 1
         assert spec.agents[0].name == "worker"
@@ -67,16 +24,13 @@ class TestWorkflowSpecParsing:
         assert spec.teardown == "on_completion"
 
     def test_dependency_workflow_parses(self) -> None:
-        raw = yaml.safe_load(TWO_TASK_DEP_YAML)
-        spec = WorkflowSpec.model_validate(raw)
+        spec = WorkflowSpec.model_validate(make_two_task_dep_dict())
         team = spec.teams[0]
         step2 = next(t for t in team.tasks if t.subject == "Step 2")
         assert step2.blocked_by == ["Step 1"]
 
-    def test_agent_defaults(self) -> None:
-        raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
-        spec = WorkflowSpec.model_validate(raw)
-        agent = spec.agents[0]
+    def test_agent_defaults(self, workflow_spec_factory: Callable[..., WorkflowSpec]) -> None:
+        agent = workflow_spec_factory().agents[0]
         assert agent.program == "claude-code"
         assert agent.runtime == "local"
         assert agent.working_dir == "/tmp"
@@ -94,38 +48,45 @@ class TestWorkflowSpecParsing:
         )
         assert agent.docker_image == "ghcr.io/example/image:latest"
 
-    def test_unknown_agent_in_team_raises(self) -> None:
-        raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
+    def test_unknown_agent_in_team_raises(
+        self, workflow_dict_factory: Callable[..., dict[str, Any]]
+    ) -> None:
+        raw = workflow_dict_factory()
         raw["teams"][0]["agents"].append("nonexistent-agent")
         with pytest.raises(Exception, match="unknown agent"):
             WorkflowSpec.model_validate(raw)
 
-    def test_unknown_assign_to_raises(self) -> None:
-        raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
+    def test_unknown_assign_to_raises(
+        self, workflow_dict_factory: Callable[..., dict[str, Any]]
+    ) -> None:
+        raw = workflow_dict_factory()
         raw["teams"][0]["tasks"][0]["assign_to"] = "ghost"
         with pytest.raises(Exception, match="not in team"):
             WorkflowSpec.model_validate(raw)
 
-    def test_teardown_default_is_on_completion(self) -> None:
-        raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
+    def test_teardown_default_is_on_completion(
+        self, workflow_dict_factory: Callable[..., dict[str, Any]]
+    ) -> None:
+        raw = workflow_dict_factory()
         del raw["teardown"]
         spec = WorkflowSpec.model_validate(raw)
         assert spec.teardown == "on_completion"
 
-    def test_invalid_teardown_raises(self) -> None:
-        raw = yaml.safe_load(MINIMAL_WORKFLOW_YAML)
+    def test_invalid_teardown_raises(
+        self, workflow_dict_factory: Callable[..., dict[str, Any]]
+    ) -> None:
+        raw = workflow_dict_factory()
         raw["teardown"] = "immediately"
         with pytest.raises(ValueError):
             WorkflowSpec.model_validate(raw)
 
 
 class TestDependencyCycleDetection:
-    def test_cycle_raises(self) -> None:
-        raw = {
-            "apiVersion": "telemachy/v1",
-            "metadata": {"name": "cycle-test"},
-            "agents": [{"name": "a"}],
-            "teams": [
+    def test_cycle_raises(self, workflow_dict_factory: Callable[..., dict[str, Any]]) -> None:
+        raw = workflow_dict_factory(
+            name="cycle-test",
+            agents=[make_agent_dict("a")],
+            teams=[
                 {
                     "name": "cycle-team",
                     "agents": ["a"],
@@ -145,8 +106,8 @@ class TestDependencyCycleDetection:
                     ],
                 }
             ],
-            "teardown": "never",
-        }
+            teardown="never",
+        )
         with pytest.raises(Exception, match="cycle"):
             WorkflowSpec.model_validate(raw)
 
@@ -186,7 +147,6 @@ class TestDependencyCycleDetection:
             )
 
     def test_linear_dependency_chain_ok(self) -> None:
-        raw = yaml.safe_load(TWO_TASK_DEP_YAML)
         # Should not raise
-        spec = WorkflowSpec.model_validate(raw)
+        spec = WorkflowSpec.model_validate(make_two_task_dep_dict())
         assert spec is not None
