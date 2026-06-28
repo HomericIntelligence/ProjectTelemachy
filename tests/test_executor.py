@@ -476,6 +476,44 @@ class TestHooks:
         assert sync_called and async_called
         assert sync_cb in calls and async_cb in calls
 
+    @pytest.mark.asyncio
+    async def test_monitor_completion_does_not_leak_emitted_subjects_across_calls(
+        self,
+    ) -> None:
+        """Calling _monitor_completion twice on the same executor must re-emit
+        callbacks for tasks with subjects seen in a prior call (#162)."""
+        from telemachy.models import WorkflowState
+
+        client = _make_mock_client()
+        client.get_tasks = AsyncMock(return_value=[{"subject": "T1", "status": "completed"}])
+
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        calls: list[str] = []
+        executor.add_hook("on_task_complete", lambda **kw: calls.append(kw["task"]["subject"]))
+
+        spec = _make_spec()
+        state = WorkflowState(
+            workflow_id="wf-1",
+            spec=spec,
+            status="running",
+            started_at="2026-06-03T00:00:00+00:00",
+        )
+        state.created_teams = {"team-a": "team-id-001"}
+
+        await executor._monitor_completion(state)
+        await executor._monitor_completion(state)
+
+        # Each call must independently emit on_task_complete for T1.
+        assert calls == ["T1", "T1"], (
+            f"Expected two emissions across two monitor calls, got {calls!r} — "
+            "state leaked between calls (#162 regression)"
+        )
+
+        # And the executor must not retain any emitted-event state on self.
+        assert not hasattr(executor, "_emitted_task_events"), (
+            "WorkflowExecutor must not carry per-monitor state on self (#162)"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Tests: timeout behaviour (#142)
