@@ -17,6 +17,14 @@ For an overview of the full ecosystem, see the
 - [Pull Request Process](#pull-request-process)
 - [Code Review](#code-review)
 
+## Where to find the roadmap
+
+Planning lives in [`docs/ROADMAP.md`](docs/ROADMAP.md). Cross-cutting
+work is bucketed into milestones (`v0.1.0`, `v0.2.0`, `v1.0.0`) and
+tagged with the `roadmap`, `nats-subscriber`, or `state-backend`
+labels. Open an issue with label `roadmap` to propose a change before
+sending a PR that alters planned scope.
+
 ## Development Setup
 
 ### Prerequisites

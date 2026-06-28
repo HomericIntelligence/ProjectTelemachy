@@ -19,7 +19,7 @@
 <!--
 Suggested reviewer(s):  @
 Suggested label(s):      bug | enhancement | docs | chore | breaking-change
-Suggested milestone:     v0.x.y  (see docs/ROADMAP.md if present)
+Suggested milestone:     v0.x.y  (see docs/ROADMAP.md)
 
 These are hints for the PR author; the actual assignment is done via
 the GitHub UI sidebar after the PR is opened.
