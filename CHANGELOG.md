@@ -51,6 +51,9 @@ See `docs/backwards-compat.md`.
   PyPI via Trusted Publishing (#153).
 - Packaging: `__all__` exports in `telemachy.__init__` for a clean public
   API (#53); PEP 561 `py.typed` marker (#45).
+- Read-only MCP server (`telemachy-mcp`) exposing `agamemnon_list_agents`
+  and `agamemnon_list_team_tasks` so AI agents can query Agamemnon state
+  during development. Closes #173.
 
 ### Changed (breaking)
 

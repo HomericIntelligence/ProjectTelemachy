@@ -20,6 +20,7 @@ prometheus-client                = ">=0.20"
 opentelemetry-api                = ">=1.25"
 opentelemetry-sdk                = ">=1.25"
 opentelemetry-instrumentation-httpx = ">=0.46b0"
+mcp                                 = ">=1.0,<2.0"
 
 [tasks]
 run             = "bash -c 'just run \"$@\"' --"

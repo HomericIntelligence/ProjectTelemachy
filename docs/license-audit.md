@@ -34,6 +34,7 @@ runtime dependencies to confirm distribution compatibility.
 | `opentelemetry-api` | Apache-2.0 | yes |
 | `opentelemetry-sdk` | Apache-2.0 | yes |
 | `opentelemetry-instrumentation-httpx` | Apache-2.0 | yes |
+| `mcp` | MIT | yes |
 
 All declared runtime dependencies are permissively licensed and
 compatible with redistribution under BSD-3-Clause.
