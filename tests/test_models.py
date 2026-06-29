@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+import yaml
 
 from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec
 from tests.conftest import make_agent_dict, make_two_task_dep_dict
