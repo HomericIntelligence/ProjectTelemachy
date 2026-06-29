@@ -4,14 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
+import time
 from typing import Any
 
 import httpx
 
 from telemachy.models import AgentSpec, TaskSpec
 from telemachy.rate_limiter import TokenBucket
+from telemachy.telemetry import AGAMEMNON_LATENCY, AGAMEMNON_REQUESTS
+
+_ID_PATH_PART = re.compile(r"/(?:[a-f0-9-]{8,}|\d+)(?=/|$)")
 
 logger = logging.getLogger(__name__)
+
+
+def _endpoint_label(url: str) -> str:
+    """Normalize '/v1/teams/abc-123/tasks' → '/v1/teams/:id/tasks'."""
+    return _ID_PATH_PART.sub("/:id", url)
 
 
 class AgamemnonError(Exception):
@@ -124,8 +134,12 @@ class AgamemnonClient:
         last_exc: Exception | None = None
         for attempt in range(max_attempts):
             await self._rate_limiter.acquire()
+            started = time.monotonic()
+            endpoint = _endpoint_label(url)
+            status_code = "error"
             try:
                 resp = await self._http.request(method, url, **kwargs)
+                status_code = str(resp.status_code)
                 if resp.status_code == 429:
                     last_exc = AgamemnonError(429, "Rate-limited (429); retrying")
                 elif resp.status_code < 500:
@@ -134,6 +148,13 @@ class AgamemnonClient:
                     last_exc = AgamemnonError(resp.status_code, f"Server error {resp.status_code}")
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
+            finally:
+                AGAMEMNON_REQUESTS.labels(
+                    method=method, endpoint=endpoint, status_code=status_code
+                ).inc()
+                AGAMEMNON_LATENCY.labels(method=method, endpoint=endpoint).observe(
+                    time.monotonic() - started
+                )
             if attempt < max_attempts - 1:
                 # Exponential backoff, capped at 2.0s so a future increase of
                 # max_attempts cannot produce unbounded per-retry sleeps that

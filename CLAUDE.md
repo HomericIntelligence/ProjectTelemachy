@@ -58,6 +58,7 @@ replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
 - `telemachy/executor.py` — Orchestrates the full workflow lifecycle: provision → assign tasks → monitor → teardown
 - `telemachy/cli.py` — Typer CLI (`run`, `plan`, `status`, `validate`, `list`, `cancel`)
 - `telemachy/config.py` — Settings loaded from environment / `.env`
+- `telemachy/telemetry.py` — Observability primitives (correlation IDs, structured logging, metrics, tracing)
 - `docs/ROADMAP.md` — canonical roadmap for outstanding work (NATS
   subscriber under #92, state backend under v1.0.0). See ADR-003.
 
@@ -94,9 +95,12 @@ teardown: on_completion | on_failure | never
 2. **Agamemnon exclusive** — never spawn agents directly; always call ProjectAgamemnon's REST API.
 3. **Idempotent teardown** — teardown is always safe to re-run; errors are logged but do not block.
 4. **Dependency-respecting** — tasks with `blocked_by` are not submitted until their predecessors complete.
-5. **Observable** — all state transitions are logged. Task completion is detected by HTTP
-   polling against Agamemnon's REST API in `_monitor_completion`; NATS event-driven
-   monitoring is planned under #92 and not yet wired up.
+5. **Observable** — all state transitions are logged; completion is currently detected by HTTP
+   polling against Agamemnon (NATS event-driven completion is planned).
+   - **Correlation IDs**: Every log record carries a per-execution `workflow_id` for end-to-end tracing.
+   - **Structured logging**: Logs can be emitted as plain text or JSON via `LOG_FORMAT` setting.
+   - **Prometheus metrics**: Workflow completion, task outcomes, and HTTP latency are exposed when `METRICS_ENABLED=true`.
+   - **OpenTelemetry tracing**: Spans are emitted for each workflow phase (provisioning, team creation, monitoring, teardown) when `OTEL_ENABLED=true`.
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
 ## Repository Structure
@@ -245,6 +249,12 @@ path that covers permissions, runner labels, and secrets references.
 | `TELEMACHY_STATE_DIR` | `~/.telemachy/state` | Directory for persisted `WorkflowState` JSON files and `<id>.cancel` sentinels. Read by `status`, `list`, `cancel`. `STATE_DIR` is also accepted as an alias. |
 | `AUDIT_LOG_PATH` | (unset) | Path to JSONL audit log. When unset, audit emission is a no-op (NullSink). |
 | `AUDIT_HASH_CHAIN` | `true` | SHA-256 hash chain for tamper-evident audit log. Resumes from existing file on restart. Disable only for tooling/tests. |
+| `LOG_FORMAT` | `plain` | Log format: `plain` (human-readable, default) or `json` (one JSON object per line) |
+| `METRICS_ENABLED` | `false` | Enable Prometheus metrics endpoint when `true` |
+| `METRICS_PORT` | `9464` | Port to expose Prometheus metrics on when `METRICS_ENABLED=true` |
+| `OTEL_ENABLED` | `false` | Enable OpenTelemetry tracing when `true` (console exporter only in this release) |
+| `OTEL_SERVICE_NAME` | `telemachy` | Service name for OpenTelemetry resource |
+| `OTEL_EXPORTER` | `console` | OTel exporter type (only `console` supported in this release; OTLP is a planned follow-up) |
 
 ## Implementation Status
 

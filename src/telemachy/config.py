@@ -54,6 +54,24 @@ class Settings(BaseSettings):
     )
     audit_log_path: str | None = None
     audit_hash_chain: bool = True
+    log_format: str = "plain"
+    metrics_enabled: bool = False
+    metrics_port: int = 9464
+    otel_enabled: bool = False
+    otel_service_name: str = "telemachy"
+    otel_exporter: str = "console"
+
+    @model_validator(mode="after")
+    def validate_observability_settings(self) -> Settings:
+        """Validate observability configuration."""
+        if self.log_format not in {"plain", "json"}:
+            raise ValueError(f"LOG_FORMAT must be 'plain' or 'json', got {self.log_format!r}")
+        if self.otel_exporter != "console":
+            raise ValueError(
+                f"OTEL_EXPORTER={self.otel_exporter!r} not supported in this release. "
+                "Only 'console' is wired; OTLP is a planned follow-up."
+            )
+        return self
 
     @model_validator(mode="after")
     def _warn_if_tls_disabled(self) -> Settings:
