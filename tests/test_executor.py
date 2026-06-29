@@ -852,3 +852,37 @@ class TestStatePersistence:
         spec = _make_spec()
         result = await executor.execute(spec)
         assert result.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Tests: audit trail
+# ---------------------------------------------------------------------------
+
+
+class TestAuditTrail:
+    @pytest.mark.asyncio
+    async def test_executor_emits_full_event_sequence(self, tmp_path: pytest.TempPathFactory) -> None:  # type: ignore
+        import json
+
+        from telemachy.audit import AuditSink
+
+        log = tmp_path / "audit.jsonl"
+        sink = AuditSink(path=log, host_id="test-host", hash_chain=True)
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01, sink=sink)
+        await executor.execute(_make_spec())
+        sink.close()
+        records = [json.loads(line) for line in log.read_text().splitlines()]
+        events = [r["event_type"] for r in records]
+        assert events[0] == "workflow.started"
+        assert "agent.created" in events
+        assert "team.created" in events
+        assert "task.submitted" in events
+        assert "task.completed" in events
+        assert "workflow.completed" in events
+        # Chain continuity end-to-end
+        for i in range(1, len(records)):
+            assert records[i]["prev_hash"] == records[i - 1]["hash"]
+        # Actor present on every record
+        for r in records:
+            assert r["actor"]["host_id"] == "test-host"

@@ -13,6 +13,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
+from telemachy.audit import (
+    AuditSinkProtocol,
+    build_sink_from_settings,
+)
 from telemachy.config import settings
 from telemachy.models import AgentSpec, TeamSpec, WorkflowSpec, WorkflowState
 
@@ -44,6 +48,7 @@ class WorkflowExecutor:
         force: bool = False,
         existing_snapshot: tuple[list[dict[str, object]], list[dict[str, object]]] | None = None,
         state_writer: Callable[[WorkflowState], None] | None = None,
+        sink: AuditSinkProtocol | None = None,
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
@@ -60,6 +65,9 @@ class WorkflowExecutor:
         self._existing_agents_by_key: dict[str, str] = {}
         self._existing_teams_by_key: dict[str, str] = {}
         self._state_writer = state_writer
+        # Inject or build from settings; build_sink_from_settings returns NullSink on failure,
+        # so executor construction never raises due to a bad audit path.
+        self._sink: AuditSinkProtocol = sink if sink is not None else build_sink_from_settings()
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -122,6 +130,14 @@ class WorkflowExecutor:
         )
         self._persist(state)
         logger.info("Starting workflow '%s' (id=%s)", spec.name, workflow_id)
+        self._sink.emit(
+            "workflow.started",
+            workflow_id=workflow_id,
+            spec_name=spec.name,
+            agents=[a.name for a in spec.agents],
+            teams=[t.name for t in spec.teams],
+            teardown=spec.teardown,
+        )
 
         try:
             state.status = "running"
@@ -167,10 +183,17 @@ class WorkflowExecutor:
                 # Graceful stop-event cancellation — monitor returned early.
                 state.completed_at = _now()
                 logger.warning("Workflow '%s' was cancelled via stop event", spec.name)
+                self._sink.emit("workflow.cancelled", workflow_id=state.workflow_id, spec_name=spec.name)
             else:
                 state.status = "completed"
                 state.completed_at = _now()
                 logger.info("Workflow '%s' completed successfully", spec.name)
+                self._sink.emit(
+                    "workflow.completed",
+                    workflow_id=state.workflow_id,
+                    spec_name=spec.name,
+                    duration_seconds=_duration(state),
+                )
                 await self._emit("on_workflow_complete", state=state)
 
         except asyncio.CancelledError:
@@ -178,6 +201,7 @@ class WorkflowExecutor:
             state.completed_at = _now()
             logger.warning("Workflow '%s' was cancelled", spec.name)
             self._persist(state)
+            self._sink.emit("workflow.cancelled", workflow_id=state.workflow_id, spec_name=spec.name)
             raise
 
         except Exception as exc:
@@ -185,6 +209,12 @@ class WorkflowExecutor:
             state.completed_at = _now()
             state.error = str(exc)
             logger.error("Workflow '%s' failed: %s", spec.name, exc)
+            self._sink.emit(
+                "workflow.failed",
+                workflow_id=state.workflow_id,
+                spec_name=spec.name,
+                error=str(exc),
+            )
             await self._emit("on_workflow_failed", state=state, error=exc)
 
         finally:
@@ -296,6 +326,13 @@ class WorkflowExecutor:
         logger.debug("Created agent '%s' → id=%s (key=%s)", spec.name, agent_id, key)
         await self._client.wake_agent(agent_id)
         logger.debug("Woke agent '%s' (id=%s)", spec.name, agent_id)
+        self._sink.emit(
+            "agent.created",
+            agent_name=spec.name,
+            agent_id=agent_id,
+            runtime=spec.runtime,
+            program=spec.program,
+        )
         return spec.name, agent_id
 
     # === Team and task creation ===
@@ -351,6 +388,12 @@ class WorkflowExecutor:
         else:
             team_id = await self._client.create_team(key, member_ids)
             logger.info("Created team '%s' → id=%s (key=%s)", team_spec.name, team_id, key)
+        self._sink.emit(
+            "team.created",
+            team_name=team_spec.name,
+            team_id=team_id,
+            members=team_spec.agents,
+        )
         await self._submit_tasks_with_deps(team_id, team_spec, agent_ids)
         return team_spec.name, team_id
 
@@ -440,7 +483,17 @@ class WorkflowExecutor:
                     team_id, task_spec, blocked_by_ids, assignee_agent_id=resolved_agent_id
                 )
                 submitted[task_spec.subject] = task_id
-                logger.info("Submitted task '%s' → id=%s", task_spec.subject, task_id)
+                logger.info(
+                    "Submitted task '%s' → id=%s", task_spec.subject, task_id
+                )
+                self._sink.emit(
+                    "task.submitted",
+                    team_id=team_id,
+                    task_subject=task_spec.subject,
+                    task_id=task_id,
+                    assign_to=task_spec.assign_to,
+                    blocked_by=task_spec.blocked_by,
+                )
                 pending.remove(task_spec)
 
     # === Monitoring ===
@@ -564,9 +617,21 @@ class WorkflowExecutor:
                         )
                         if task_subject not in emitted_done:
                             emitted_done.add(task_subject)
+                            self._sink.emit(
+                                "task.failed",
+                                workflow_id=state.workflow_id,
+                                team=team_name,
+                                task_subject=task_subject,
+                            )
                             await self._emit("on_task_failed", task=task, team=team_name)
                     elif status == "completed" and task_subject not in emitted_done:
                         emitted_done.add(task_subject)
+                        self._sink.emit(
+                            "task.completed",
+                            workflow_id=state.workflow_id,
+                            team=team_name,
+                            task_subject=task_subject,
+                        )
                         await self._emit("on_task_complete", task=task, team=team_name)
 
             if all_done:
@@ -608,6 +673,7 @@ class WorkflowExecutor:
             try:
                 await self._client.delete_team(team_id)
                 logger.debug("Deleted team '%s' (id=%s)", name, team_id)
+                self._sink.emit("team.deleted", team_name=name, team_id=team_id)
             except AgamemnonError as exc:
                 logger.warning("Failed to delete team '%s': %s", name, exc)
 
@@ -615,6 +681,7 @@ class WorkflowExecutor:
             try:
                 await self._client.delete_agent(agent_id)
                 logger.debug("Deleted agent '%s' (id=%s)", name, agent_id)
+                self._sink.emit("agent.deleted", agent_name=name, agent_id=agent_id)
             except AgamemnonError as exc:
                 logger.warning("Failed to delete agent '%s': %s", name, exc)
 
@@ -623,6 +690,15 @@ class WorkflowExecutor:
 
 def _now() -> str:
     return datetime.now(tz=UTC).isoformat()
+
+
+def _duration(state: WorkflowState) -> float | None:
+    """Calculate workflow duration in seconds. Returns None if incomplete timing."""
+    if state.started_at and state.completed_at:
+        start = datetime.fromisoformat(state.started_at)
+        end = datetime.fromisoformat(state.completed_at)
+        return (end - start).total_seconds()
+    return None
 
 
 async def run_workflow(

@@ -243,6 +243,8 @@ path that covers permissions, runner labels, and secrets references.
 | `HEALTHCHECK_FAILURE_THRESHOLD` | `2` | Consecutive failed probes before raising `WorkflowConnectivityError`. |
 | `HEALTHCHECK_TIMEOUT_SECONDS` | `5` | Per-probe HTTP timeout (overrides client-wide 30s). |
 | `TELEMACHY_STATE_DIR` | `~/.telemachy/state` | Directory for persisted `WorkflowState` JSON files and `<id>.cancel` sentinels. Read by `status`, `list`, `cancel`. `STATE_DIR` is also accepted as an alias. |
+| `AUDIT_LOG_PATH` | (unset) | Path to JSONL audit log. When unset, audit emission is a no-op (NullSink). |
+| `AUDIT_HASH_CHAIN` | `true` | SHA-256 hash chain for tamper-evident audit log. Resumes from existing file on restart. Disable only for tooling/tests. |
 
 ## Implementation Status
 
