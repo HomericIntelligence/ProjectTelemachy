@@ -14,14 +14,15 @@ update this table whenever the data flow changes — in particular, the planned
 NATS event subscriber under #92 may introduce new sinks; that PR must revise
 this table.
 
-| Field                             | Sent to Agamemnon? | Logged by Telemachy? | Log level (where) |
-| --------------------------------- | ------------------ | -------------------- | ----------------- |
-| `metadata.name`                   | No                 | Yes                  | INFO (`executor.py:103`) |
-| `metadata.description`            | No                 | No                   | —                 |
-| `agents[].name`, `agents[].model` | Yes (agent create) | Yes                  | DEBUG (`executor.py:194`) |
-| `teams[].name`                    | Yes (team create)  | Yes                  | INFO (`executor.py:235`) |
-| `tasks[].subject`                 | Yes (task create)  | Yes                  | INFO (`executor.py:307`); WARNING when a dependency fails (`executor.py:264-272`) |
-| `tasks[].description`             | Yes (task create — see `agamemnon_client.py:228-231`) | No | — |
+| Field                    | Sent to Agamemnon? | Logged by Telemachy? | Log level (where) |
+| ------------------------ | ------------------ | -------------------- | ----------------- |
+| `metadata.name`          | No                 | Yes                  | INFO (`executor.py:102`) |
+| `metadata.description`   | No                 | No                   | —                 |
+| `agents[].name`          | Yes (agent create) | Yes                  | DEBUG (`executor.py:195`) |
+| `agents[].model`         | Yes (agent create — as `programArgs`, see `agamemnon_client.py:148-149`) | No | — |
+| `teams[].name`           | Yes (team create)  | Yes                  | INFO (`executor.py:236`) |
+| `tasks[].subject`        | Yes (task create)  | Yes                  | INFO (`executor.py:304-305`); WARNING when a dependency fails (`executor.py:264-268`) |
+| `tasks[].description`    | Yes (task create — see `agamemnon_client.py:228-231`) | No | — |
 
 ## Author guidance
 
@@ -44,8 +45,8 @@ require a heuristic regex that risks redacting legitimate content (model
 names, agent names, task subjects). Operators have these levers instead:
 
 - **`LOG_LEVEL=WARNING`** — suppresses the INFO-level subject logging in
-  `executor.py:307`. WARNING-level logs still emit subjects when a
-  dependency fails (`executor.py:264-272`), so this is a coarse but
+  `executor.py:304-305`. WARNING-level logs still emit subjects when a
+  dependency fails (`executor.py:264-268`), so this is a coarse but
   effective lever.
 - **Log-shipping-side scrubbing** — apply your existing log-aggregation
   scrubber (Vector, Fluent Bit, Logstash, GCP Cloud Logging redaction
