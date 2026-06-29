@@ -55,7 +55,9 @@ class TeamSpec(BaseModel):
     def no_self_dependency(cls, tasks: list[TaskSpec]) -> list[TaskSpec]:
         for task in tasks:
             if task.subject in task.blocked_by:
-                raise ValueError(f"Task '{task.subject}' cannot depend on itself")
+                raise ValueError(
+                    f"Task '{task.subject}' cannot depend on itself"
+                )
         return tasks
 
     @model_validator(mode="after")
@@ -91,7 +93,9 @@ class TeamSpec(BaseModel):
         for task in self.tasks:
             for dep in task.blocked_by:
                 if dep not in task_subjects:
-                    raise ValueError(f"Task '{task.subject}' depends on unknown task '{dep}'")
+                    raise ValueError(
+                        f"Task '{task.subject}' depends on unknown task '{dep}'"
+                    )
 
         # Topological sort (Kahn's algorithm) to detect cycles
         in_degree: dict[str, int] = {t: 0 for t in task_subjects}
@@ -111,7 +115,9 @@ class TeamSpec(BaseModel):
                         queue.append(subject)
 
         if visited != len(task_subjects):
-            raise ValueError(f"Team '{self.name}' has a dependency cycle in its tasks")
+            raise ValueError(
+                f"Team '{self.name}' has a dependency cycle in its tasks"
+            )
 
 
 class WorkflowSpec(BaseModel):
@@ -163,7 +169,9 @@ class WorkflowSpec(BaseModel):
             # Validate agent references in team
             for agent_name in team.agents:
                 if agent_name not in agent_names:
-                    raise ValueError(f"Team '{team.name}' references unknown agent '{agent_name}'")
+                    raise ValueError(
+                        f"Team '{team.name}' references unknown agent '{agent_name}'"
+                    )
             # Validate task assign_to references
             for task in team.tasks:
                 if task.assign_to not in agent_names:
@@ -193,7 +201,14 @@ class WorkflowState(BaseModel):
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
     # Use default_factory to avoid sharing a mutable default across instances.
     created_agents: dict[str, str] = Field(default_factory=dict)  # agent name → agamemnon agent id
-    created_teams: dict[str, str] = Field(default_factory=dict)  # team name → agamemnon team id
+    created_teams: dict[str, str] = Field(default_factory=dict)   # team name → agamemnon team id
+    submitted_task_subjects: set[str] = Field(default_factory=set)
+    """Subjects of tasks actually submitted via create_task; excludes skipped tasks.
+
+    Populated by _submit_tasks_with_deps as each task is created. _wait_for_all_terminal
+    iterates this set (not state.spec.teams) so workflows with dep-failure-skipped tasks
+    cannot hang waiting on terminal events that will never arrive.
+    """
     started_at: str | None = None
     completed_at: str | None = None
     error: str | None = None

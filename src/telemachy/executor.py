@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import inspect
 import logging
 import time
@@ -18,7 +17,9 @@ from telemachy.audit import (
     build_sink_from_settings,
 )
 from telemachy.config import settings
+from telemachy.constants import DONE_STATUSES as _DONE_STATUSES
 from telemachy.models import AgentSpec, TeamSpec, WorkflowSpec, WorkflowState
+from telemachy.nats_monitor import NatsMonitor, NatsUnavailableError
 from telemachy.telemetry import (
     TASKS_TOTAL,
     WORKFLOW_DURATION,
@@ -31,21 +32,24 @@ from telemachy.telemetry import (
 
 logger = logging.getLogger(__name__)
 
-# Terminal task statuses reported by ProjectAgamemnon
-# NOTE: "backlog" is an initial/queued state, NOT a terminal state — do not include it here.
-_DONE_STATUSES = {"completed", "failed", "error", "cancelled"}
-
 
 class WorkflowTimeoutError(Exception):
     """Raised when workflow monitoring exceeds the configured timeout or max poll count."""
 
 
 class WorkflowConnectivityError(Exception):
-    """Raised when Agamemnon fails consecutive heartbeat probes during monitoring."""
+    """Raised when the event bus (NATS) connection is lost mid-workflow."""
 
 
 class WorkflowExecutor:
-    """Executes a WorkflowSpec against Agamemnon, monitoring until completion."""
+    """Executes a WorkflowSpec against Agamemnon, monitoring until completion.
+
+    Completion monitoring is event-driven: the executor subscribes to Agamemnon's
+    NATS task-lifecycle subjects and waits on per-task terminal events rather than
+    polling Agamemnon over HTTP (#3). NATS is a hard runtime dependency — the
+    monitoring phase fails fast (NatsUnavailableError) if the broker is
+    unreachable or the connection drops mid-workflow.
+    """
 
     def __init__(
         self,
@@ -83,6 +87,10 @@ class WorkflowExecutor:
             "on_workflow_complete": [],
             "on_workflow_failed": [],
         }
+        # Subjects for which a terminal-state callback has already been emitted.
+        # Declared here (rather than via getattr/setattr) so the attribute is
+        # statically typed and per-instance; reset at the top of each execute().
+        self._emitted_task_events: set[str] = set()
 
     def add_hook(self, event: str, callback: Callable[..., Any]) -> None:
         """Register a callback for a workflow execution event.
@@ -116,9 +124,9 @@ class WorkflowExecutor:
 
     async def execute(self, spec: WorkflowSpec, workflow_id: str | None = None) -> WorkflowState:
         """Run a full workflow: provision → assign tasks → monitor → teardown."""
-        # Emitted-event subjects are scoped to each monitor session (local set
-        # in _monitor_completion), so no per-execution instance reset is needed
-        # — reusing the same executor cannot leak prior-run subjects (#162/#203).
+        # Reset per-execution state so reusing the same executor for a second
+        # workflow does not leak emitted-event subjects from the prior run (#203).
+        self._emitted_task_events = set()
         timeout = (
             spec.timeout_seconds
             if spec.timeout_seconds is not None
@@ -193,17 +201,33 @@ class WorkflowExecutor:
                     await self._provision_agents(spec.agents, spec.name, state)
                     self._persist(state)
 
-                    # Create teams and submit tasks (respecting dependencies)
-                    state.created_teams = await self._create_teams(
+                    # Create teams FIRST (no tasks yet) so we can subscribe to their
+                    # NATS task-lifecycle subjects before submitting any task — this
+                    # closes the create→subscribe race (#3).
+                    state.created_teams = await self._create_teams_only(
                         spec.teams, state.created_agents, spec.name
                     )
                     self._persist(state)
 
-                    # Monitor until all tasks reach a terminal state (skipped in dry-run)
-                    if not self._dry_run:
-                        await self._monitor_completion(state)
-                    else:
+                    # Monitor until all tasks reach a terminal state (skipped in dry-run).
+                    if self._dry_run:
                         logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
+                    else:
+                        async with NatsMonitor(
+                            settings.nats_url, stop_event=self._stop_event
+                        ) as monitor:
+                            for team_id in state.created_teams.values():
+                                await monitor.subscribe_team(team_id)
+                            await self._reconcile_initial(state, monitor)
+                            await self._submit_all_team_tasks(
+                                spec.teams,
+                                state.created_agents,
+                                state.created_teams,
+                                state,
+                                monitor,
+                            )
+                            self._persist(state)
+                            await self._wait_for_all_terminal(state, monitor)
 
                     if state.status == "cancelled":
                         # Graceful stop-event cancellation — monitor returned early.
@@ -242,6 +266,10 @@ class WorkflowExecutor:
                     state.status = "failed"
                     state.completed_at = _now()
                     state.error = str(exc)
+                    # A lost event-bus connection should still honour an on_completion
+                    # teardown policy (mirrors the prior connectivity-loss semantics, #161).
+                    if isinstance(exc, NatsUnavailableError):
+                        state.connectivity_failed = True
                     logger.error("Workflow '%s' failed: %s", spec.name, exc)
                     self._sink.emit(
                         "workflow.failed",
@@ -328,7 +356,6 @@ class WorkflowExecutor:
         """
         from telemachy.idempotency import make_key
 
-
         if self._dry_run:
             dry_id = f"dry-run-agent-{spec.name}"
             id_map[spec.name] = dry_id
@@ -383,32 +410,35 @@ class WorkflowExecutor:
 
     # === Team and task creation ===
 
-    async def _create_teams(
+    async def _create_teams_only(
         self,
         teams: list[TeamSpec],
         agent_ids: dict[str, str],
         workflow_name: str,
     ) -> dict[str, str]:
-        """Create all teams concurrently and submit tasks respecting dependencies.
+        """Create all teams concurrently WITHOUT submitting tasks yet.
 
-        Teams are provisioned in parallel via asyncio.gather (see #55).
+        Tasks are submitted later by _submit_all_team_tasks, after the NATS
+        monitor has subscribed to each team's task-lifecycle subjects — this
+        closes the create→subscribe race so no terminal event is missed (#3).
+        Idempotency reuse of existing teams is preserved (#55).
         Returns {team_name: team_id}.
         """
         with get_tracer().start_as_current_span(
             "telemachy.create_teams", attributes={"telemachy.team_count": len(teams)}
         ):
             results: list[tuple[str, str]] = await asyncio.gather(
-                *[self._create_team(team_spec, agent_ids, workflow_name) for team_spec in teams]
+                *[self._create_team_only(team_spec, agent_ids, workflow_name) for team_spec in teams]
             )
             return dict(results)
 
-    async def _create_team(
+    async def _create_team_only(
         self,
         team_spec: TeamSpec,
         agent_ids: dict[str, str],
         workflow_name: str,
     ) -> tuple[str, str]:
-        """Create a single team, submit its tasks, and return (team_name, team_id)."""
+        """Create (or reuse) a single team; do NOT submit its tasks yet."""
         from telemachy.idempotency import make_key
 
         if self._dry_run:
@@ -443,19 +473,43 @@ class WorkflowExecutor:
             team_id=team_id,
             members=team_spec.agents,
         )
-        await self._submit_tasks_with_deps(team_id, team_spec, agent_ids)
         return team_spec.name, team_id
+
+    async def _submit_all_team_tasks(
+        self,
+        teams: list[TeamSpec],
+        agent_ids: dict[str, str],
+        team_ids: dict[str, str],
+        state: WorkflowState,
+        monitor: NatsMonitor,
+    ) -> None:
+        """Submit tasks for all teams concurrently; respect dependencies via monitor."""
+        await asyncio.gather(
+            *[
+                self._submit_tasks_with_deps(team_ids[ts.name], ts, agent_ids, state, monitor)
+                for ts in teams
+            ]
+        )
 
     async def _submit_tasks_with_deps(
         self,
         team_id: str,
         team_spec: TeamSpec,
         agent_ids: dict[str, str],
+        state: WorkflowState,
+        monitor: NatsMonitor,
     ) -> None:
-        """Submit tasks in dependency order, waiting for predecessors to finish.
+        """Submit tasks in dependency order, using NATS terminal events to unblock.
 
-        If a dependency has failed/errored/cancelled, the dependent task is skipped
+        Cross-team and intra-team dependencies are awaited on the monitor's
+        per-subject terminal events (no HTTP polling, no asyncio.sleep). If a
+        dependency has failed/errored/cancelled, the dependent task is skipped
         rather than waiting forever (prevents infinite loop — see #13).
+
+        Idempotency reuse of already-submitted tasks is preserved (#55): on a
+        non-force run, existing tasks for this team are reused and their initial
+        status is seeded into the monitor so completed predecessors unblock
+        immediately.
         """
         submitted: dict[str, str] = {}   # subject → task_id
         completed_subjects: set[str] = set()
@@ -470,11 +524,16 @@ class WorkflowExecutor:
                 status = str(t.get("status", ""))
                 if subj and tid:
                     submitted[subj] = tid
+                    # Seed the monitor so reused-task terminal status unblocks deps.
+                    if status:
+                        monitor.record_status(subj, status)
                     if status == "completed":
                         completed_subjects.add(subj)
                     elif status in {"failed", "error", "cancelled"}:
                         failed_subjects.add(subj)
             if submitted:
+                # Reused tasks count toward the watched set so monitoring waits on them.
+                state.submitted_task_subjects.update(submitted)
                 logger.info(
                     "Reusing %d existing task(s) in team %s", len(submitted), team_spec.name
                 )
@@ -482,7 +541,7 @@ class WorkflowExecutor:
         pending = [t for t in team_spec.tasks if t.subject not in submitted]
 
         while pending:
-            # Skip tasks whose dependencies have failed
+            # Skip tasks whose dependencies have failed/were-skipped (preserves #13).
             newly_skipped = [
                 t for t in pending
                 if any(dep in failed_subjects or dep in skipped_subjects for dep in t.blocked_by)
@@ -491,7 +550,11 @@ class WorkflowExecutor:
                 logger.warning(
                     "Skipping task '%s': a dependency failed or was skipped (%s)",
                     task_spec.subject,
-                    [dep for dep in task_spec.blocked_by if dep in failed_subjects or dep in skipped_subjects],
+                    [
+                        dep
+                        for dep in task_spec.blocked_by
+                        if dep in failed_subjects or dep in skipped_subjects
+                    ],
                 )
                 skipped_subjects.add(task_spec.subject)
                 pending.remove(task_spec)
@@ -506,31 +569,54 @@ class WorkflowExecutor:
                 if self._stop_event and self._stop_event.is_set():
                     logger.warning("Stop event set — aborting task submission")
                     raise asyncio.CancelledError("Task submission cancelled by stop event")
-                # Wait for some tasks to complete before continuing
-                await asyncio.sleep(self._poll_interval)
-                tasks_status = await self._client.get_tasks(team_id)
-                for task_status in tasks_status:
-                    subject = str(task_status.get("subject", ""))
-                    status = str(task_status.get("status", ""))
-                    if status == "completed" and subject in submitted:
-                        completed_subjects.add(subject)
-                    elif status in {"failed", "error", "cancelled"} and subject in submitted:
-                        failed_subjects.add(subject)
+
+                # Wait for ANY signal that could unblock us:
+                #   - a predecessor's terminal_event fires (cross-team predecessor done)
+                #   - submitted_event fires (another team submitted a task we depend on)
+                #   - 30s watchdog wake (re-check stop_event)
+                pred_subjects = {d for t in pending for d in t.blocked_by}
+                waiters: list[asyncio.Task[Any]] = [
+                    asyncio.create_task(monitor.terminal_event(s).wait()) for s in pred_subjects
+                ]
+                waiters.append(asyncio.create_task(monitor.submitted_event.wait()))
+                try:
+                    await asyncio.wait(
+                        waiters,
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=30.0,
+                    )
+                finally:
+                    for w in waiters:
+                        if not w.done():
+                            w.cancel()
+
+                # Re-derive status sets from the monotonic latest_status snapshot.
+                for subj in list(submitted) + list(pred_subjects):
+                    s = monitor.latest_status(subj)
+                    if s == "completed":
+                        completed_subjects.add(subj)
+                    elif s in {"failed", "error", "cancelled"}:
+                        failed_subjects.add(subj)
                 continue
 
             for task_spec in ready:
-                blocked_by_ids = [submitted[dep] for dep in task_spec.blocked_by if dep in submitted]
+                blocked_by_ids = [
+                    submitted[dep] for dep in task_spec.blocked_by if dep in submitted
+                ]
                 # Resolve agent name → Agamemnon agent ID before submitting (#12)
                 resolved_agent_id: str | None = None
                 if task_spec.assign_to:
                     resolved_agent_id = agent_ids.get(task_spec.assign_to)
                 task_id = await self._client.create_task(
-                    team_id, task_spec, blocked_by_ids, assignee_agent_id=resolved_agent_id
+                    team_id,
+                    task_spec,
+                    blocked_by_ids,
+                    assignee_agent_id=resolved_agent_id,
                 )
                 submitted[task_spec.subject] = task_id
-                logger.info(
-                    "Submitted task '%s' → id=%s", task_spec.subject, task_id
-                )
+                state.submitted_task_subjects.add(task_spec.subject)
+                monitor.notify_submitted()
+                logger.info("Submitted task '%s' → id=%s", task_spec.subject, task_id)
                 self._sink.emit(
                     "task.submitted",
                     team_id=team_id,
@@ -541,154 +627,106 @@ class WorkflowExecutor:
                 )
                 pending.remove(task_spec)
 
-    # === Monitoring ===
+    # === Monitoring (NATS event-driven) ===
 
-    async def _monitor_completion(self, state: WorkflowState) -> None:
-        """Poll all team tasks until every task reaches a terminal status.
+    async def _reconcile_initial(self, state: WorkflowState, monitor: NatsMonitor) -> None:
+        """One-shot snapshot after subscription to close the create→subscribe race.
 
-        The set of subjects for which we've already emitted a terminal-state
-        callback is scoped to this single monitoring session (#162) — invoking
-        _monitor_completion again starts with a fresh set, so duplicate task
-        subjects across separate runs each get their callbacks.
+        Events arriving between snapshot REQUEST and snapshot RESPONSE are buffered into
+        monitor's per-subject Event; record_status' terminal-sticky rule prevents the
+        snapshot from clobbering an already-terminal status.
+        """
+        for team_id in state.created_teams.values():
+            for task in await self._client.get_tasks(team_id):
+                subj = str(task.get("subject", ""))
+                status = str(task.get("status", ""))
+                if subj and status:
+                    monitor.record_status(subj, status)
 
-        Runs a background heartbeat task to detect Agamemnon connectivity loss
-        mid-workflow. If connectivity is lost, raises WorkflowConnectivityError
-        which sets state.connectivity_failed for teardown.
+    async def _wait_for_all_terminal(self, state: WorkflowState, monitor: NatsMonitor) -> None:
+        """Wait until every SUBMITTED task subject has a terminal status via NATS events.
+
+        Emits the same observability (TASKS_TOTAL metric) and audit
+        (task.completed / task.failed) signals the prior HTTP-polling monitor
+        emitted, and respects stop_event / monitor_timeout. The set of subjects
+        for which we've emitted a terminal-state callback is the per-execution
+        instance set (#162/#203). NATS connection loss raises NatsUnavailableError.
         """
         with get_tracer().start_as_current_span("telemachy.monitor_completion"):
-            logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
-            connectivity_lost = asyncio.Event()
-            heartbeat = asyncio.create_task(
-                self._heartbeat(state.spec.name, connectivity_lost),
-                name=f"telemachy-heartbeat-{state.workflow_id}",
-            )
-            try:
-                await self._poll_until_done(state, connectivity_lost)
-            finally:
-                heartbeat.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await heartbeat
-
-    async def _heartbeat(self, workflow_name: str, connectivity_lost: asyncio.Event) -> None:
-        """Background task that probes Agamemnon liveness on a timer.
-
-        Calls ping() every healthcheck_interval_seconds and sets connectivity_lost
-        after healthcheck_failure_threshold consecutive failures.
-        """
-        interval = settings.healthcheck_interval_seconds
-        threshold = settings.healthcheck_failure_threshold
-        timeout = settings.healthcheck_timeout_seconds
-        consecutive_failures = 0
-        while not connectivity_lost.is_set():
-            await asyncio.sleep(interval)
-            ok = await self._client.ping(timeout=timeout)
-            if ok:
-                if consecutive_failures:
-                    logger.info(
-                        "Agamemnon connectivity restored for workflow '%s' after %d failure(s)",
-                        workflow_name,
-                        consecutive_failures,
-                    )
-                consecutive_failures = 0
-                continue
-            consecutive_failures += 1
-            logger.warning(
-                "Agamemnon health check failed (%d/%d) for workflow '%s'",
-                consecutive_failures,
-                threshold,
-                workflow_name,
-            )
-            if consecutive_failures >= threshold:
-                connectivity_lost.set()
-                return
-
-    async def _poll_until_done(
-        self, state: WorkflowState, connectivity_lost: asyncio.Event
-    ) -> None:
-        """Poll all team tasks until every task reaches a terminal status.
-
-        Checks the connectivity_lost event at the start of each iteration and
-        raises WorkflowConnectivityError if it is set, storing the failure flag
-        on state so _teardown can honour it under on_completion policy.
-        """
-        poll_count = 0
-        start_time = time.monotonic()
-        timeout = settings.monitor_timeout_seconds
-        max_polls = settings.monitor_max_polls
-        emitted_done: set[str] = set()
-
-        while True:
-            if connectivity_lost.is_set():
-                state.connectivity_failed = True
-                raise WorkflowConnectivityError(
-                    f"Agamemnon failed {settings.healthcheck_failure_threshold} "
-                    f"consecutive health checks for workflow '{state.spec.name}'"
-                )
-            if self._stop_event and self._stop_event.is_set():
-                logger.warning(
-                    "Stop event set — aborting monitoring for workflow '%s'",
-                    state.spec.name,
-                )
-                state.status = "cancelled"
-                return
-
-            elapsed = time.monotonic() - start_time
-            if elapsed > timeout:
-                raise WorkflowTimeoutError(
-                    f"Monitoring timed out after {elapsed:.1f}s "
-                    f"(limit: {timeout}s) for workflow '{state.spec.name}'"
-                )
-            if poll_count > max_polls:
-                raise WorkflowTimeoutError(
-                    f"Monitoring exceeded max poll count {max_polls} "
-                    f"for workflow '{state.spec.name}'"
-                )
-
-            all_done = True
+            logger.info("Monitoring workflow '%s' via NATS events", state.spec.name)
+            start = time.monotonic()
+            timeout = settings.monitor_timeout_seconds
             any_failed = False
+            while True:
+                if self._stop_event and self._stop_event.is_set():
+                    logger.warning(
+                        "Stop event set — aborting monitoring for workflow '%s'",
+                        state.spec.name,
+                    )
+                    state.status = "cancelled"
+                    return
+                if not monitor.connected:
+                    state.connectivity_failed = True
+                    raise NatsUnavailableError(
+                        f"NATS connection lost mid-workflow for '{state.spec.name}'"
+                    )
+                if time.monotonic() - start > timeout:
+                    raise WorkflowTimeoutError(
+                        f"Monitoring timed out after {timeout}s for '{state.spec.name}'"
+                    )
 
-            for team_name, team_id in state.created_teams.items():
-                tasks = await self._client.get_tasks(team_id)
-                for task in tasks:
-                    status = str(task.get("status", ""))
-                    task_subject = str(task.get("subject", ""))
-                    if status not in _DONE_STATUSES:
-                        all_done = False
-                    if status in _DONE_STATUSES and task_subject not in emitted_done:
+                # Snapshot of subjects we are actually waiting on (Decision 6).
+                watched = set(state.submitted_task_subjects)
+
+                for subj in watched:
+                    status = monitor.latest_status(subj)
+                    if status in _DONE_STATUSES and subj not in self._emitted_task_events:
                         TASKS_TOTAL.labels(status=status).inc()
-                    if status in {"failed", "error"}:
+                    if status in {"failed", "error"} and subj not in self._emitted_task_events:
+                        self._emitted_task_events.add(subj)
                         any_failed = True
-                        logger.warning(
-                            "Task '%s' in team '%s' failed",
-                            task_subject,
-                            team_name,
+                        logger.warning("Task '%s' failed (status=%s)", subj, status)
+                        self._sink.emit(
+                            "task.failed",
+                            workflow_id=state.workflow_id,
+                            team="",
+                            task_subject=subj,
                         )
-                        if task_subject not in emitted_done:
-                            emitted_done.add(task_subject)
-                            self._sink.emit(
-                                "task.failed",
-                                workflow_id=state.workflow_id,
-                                team=team_name,
-                                task_subject=task_subject,
-                            )
-                            await self._emit("on_task_failed", task=task, team=team_name)
-                    elif status == "completed" and task_subject not in emitted_done:
-                        emitted_done.add(task_subject)
+                        await self._emit(
+                            "on_task_failed", task={"subject": subj, "status": status}, team=""
+                        )
+                    elif status == "completed" and subj not in self._emitted_task_events:
+                        self._emitted_task_events.add(subj)
                         self._sink.emit(
                             "task.completed",
                             workflow_id=state.workflow_id,
-                            team=team_name,
-                            task_subject=task_subject,
+                            team="",
+                            task_subject=subj,
                         )
-                        await self._emit("on_task_complete", task=task, team=team_name)
+                        await self._emit(
+                            "on_task_complete", task={"subject": subj, "status": status}, team=""
+                        )
 
-            if all_done:
-                if any_failed:
-                    raise RuntimeError("One or more tasks failed during workflow execution")
-                return
+                unfinished = [
+                    s for s in watched if monitor.latest_status(s) not in _DONE_STATUSES
+                ]
+                if not unfinished:
+                    if any_failed:
+                        raise RuntimeError("One or more tasks failed during workflow execution")
+                    return
 
-            poll_count += 1
-            await asyncio.sleep(self._poll_interval)
+                # Wake on any terminal event OR 5s watchdog (keeps stop_event/timeout responsive).
+                waiters = [
+                    asyncio.create_task(monitor.terminal_event(s).wait()) for s in unfinished
+                ]
+                try:
+                    await asyncio.wait(
+                        waiters, return_when=asyncio.FIRST_COMPLETED, timeout=5.0
+                    )
+                finally:
+                    for w in waiters:
+                        if not w.done():
+                            w.cancel()
 
     # === Teardown ===
 
@@ -704,11 +742,12 @@ class WorkflowExecutor:
 
             policy = state.spec.teardown
 
-            # A connectivity-induced failure should still honour an `on_completion`
-            # policy — the workflow author asked us to clean up after this workflow,
-            # and "Agamemnon went away mid-run" should not leak agents and teams
-            # (see #161). We do NOT extend on_completion to *task* failures, which
-            # are the existing "leave for inspection" behaviour.
+            # A connectivity-induced failure (NATS bus lost mid-run) should still
+            # honour an `on_completion` policy — the workflow author asked us to
+            # clean up after this workflow, and "the event bus went away mid-run"
+            # should not leak agents and teams (see #161). We do NOT extend
+            # on_completion to *task* failures, which are the existing
+            # "leave for inspection" behaviour.
             should_teardown = (
                 (policy == "on_completion" and state.status == "completed")
                 or (policy == "on_completion" and state.connectivity_failed)

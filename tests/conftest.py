@@ -6,15 +6,18 @@ the factory with only the fields it cares about; defaults come from one
 place so a schema change in src/telemachy/models.py only edits this file.
 
 Also hosts the in-process Agamemnon stub fixtures used by the workflow
-lifecycle integration tests (#146).
+lifecycle integration tests (#146), plus the auto-mock for the NATS
+event-driven completion monitor (#3) so non-NATS tests never touch a broker.
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -23,6 +26,7 @@ import yaml
 
 from telemachy.agamemnon_client import AgamemnonClient
 from telemachy.models import WorkflowSpec
+from telemachy.nats_monitor import NatsMonitor
 from tests.stub_agamemnon import StubAgamemnon
 
 # --- dict-level builders (single source of truth) --------------------------
@@ -292,3 +296,72 @@ def load_workflow(path: Path) -> WorkflowSpec:
     from telemachy.cli import _load_workflow
 
     return _load_workflow(path)
+
+
+# --- NATS event-driven monitor auto-mock (#3) ------------------------------
+
+
+def _create_mock_nats_monitor() -> MagicMock:
+    """Create a mocked NatsMonitor with sensible defaults."""
+    mock_monitor = MagicMock(spec=NatsMonitor)
+    mock_monitor.__aenter__ = AsyncMock(return_value=mock_monitor)
+    mock_monitor.__aexit__ = AsyncMock(return_value=None)
+    mock_monitor.connected = True
+
+    # Store recorded statuses so record_status actually works
+    recorded_statuses: dict[str, str] = {}
+
+    def mock_latest_status(subj: str) -> str | None:
+        return recorded_statuses.get(subj, "completed")
+
+    def mock_record_status(subj: str, status: str) -> None:
+        if subj:
+            recorded_statuses[subj] = status
+
+    mock_monitor.latest_status = MagicMock(side_effect=mock_latest_status)
+    mock_monitor.record_status = MagicMock(side_effect=mock_record_status)
+    mock_monitor.subscribe_team = AsyncMock()
+    mock_monitor.notify_submitted = MagicMock()
+    mock_monitor.submitted_event = asyncio.Event()
+
+    def make_event(*args: object, **kwargs: object) -> asyncio.Event:
+        ev = asyncio.Event()
+        ev.set()
+        return ev
+
+    mock_monitor.terminal_event.side_effect = make_event
+    return mock_monitor
+
+
+@pytest.fixture
+def mock_nats_monitor() -> MagicMock:
+    """Fixture that provides a mocked NatsMonitor with sensible defaults."""
+    return _create_mock_nats_monitor()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register pytest markers."""
+    config.addinivalue_line(
+        "markers",
+        "nats_monitor_test: mark test as specifically testing NatsMonitor (don't auto-mock)",
+    )
+
+
+@pytest.fixture(autouse=True)
+def auto_patch_nats_monitor(request: pytest.FixtureRequest) -> asyncio.Iterator[None]:
+    """Automatically patch NatsMonitor for all tests except those marked as nats_monitor_test."""
+    # Skip patching for tests that are specifically testing NATS monitor behavior
+    if "nats_monitor_test" in request.keywords:
+        yield
+        return
+
+    # Skip patching for tests in TestNatsMonitoring
+    if "TestNatsMonitoring" in request.node.nodeid:
+        yield
+        return
+
+    # Auto-patch NatsMonitor for all other tests
+    patcher = patch("telemachy.executor.NatsMonitor", return_value=_create_mock_nats_monitor())
+    patcher.start()
+    yield
+    patcher.stop()

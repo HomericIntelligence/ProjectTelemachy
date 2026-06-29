@@ -1,8 +1,15 @@
-"""Tests for Agamemnon health-check functionality (issue #161)."""
+"""Tests for Agamemnon health-check + event-bus connectivity (issues #161, #3).
+
+`client.ping()` health-probing is unchanged. Mid-workflow connectivity loss is
+now detected by the NATS event monitor (`monitor.connected`) rather than an HTTP
+heartbeat poll (#3); a lost event bus raises NatsUnavailableError, sets
+state.connectivity_failed, and — critically (#161) — still triggers teardown
+under an on_completion policy so agents/teams do not leak.
+"""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -10,6 +17,7 @@ import pytest
 from telemachy.agamemnon_client import AgamemnonClient
 from telemachy.executor import WorkflowExecutor
 from telemachy.models import WorkflowSpec
+from tests.conftest import _create_mock_nats_monitor
 
 
 def _make_spec(
@@ -43,6 +51,7 @@ def _make_mock_client() -> MagicMock:
     client.hibernate_agent = AsyncMock()
     client.delete_agent = AsyncMock()
     client.list_agents = AsyncMock(return_value=[])
+    client.list_teams = AsyncMock(return_value=[])
     client.ping = AsyncMock(return_value=True)
     client.create_team = AsyncMock(return_value="team-id-001")
     client.create_task = AsyncMock(return_value="task-id-001")
@@ -50,6 +59,25 @@ def _make_mock_client() -> MagicMock:
     client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "completed"}])
     client.delete_team = AsyncMock()
     return client
+
+
+def _disconnected_monitor() -> MagicMock:
+    """A NATS monitor mock that is connected at enter but reports a mid-workflow
+    disconnect: tasks never reach a terminal status and `connected` is False, so
+    `_wait_for_all_terminal` raises NatsUnavailableError."""
+    monitor = _create_mock_nats_monitor()
+    monitor.connected = False
+    # Tasks never become terminal, so the wait loop must rely on the connectivity
+    # check (not a terminal event) to break out.
+    monitor.latest_status = MagicMock(return_value="in_progress")
+
+    import asyncio
+
+    def _unset_event(_subject: str) -> asyncio.Event:
+        return asyncio.Event()  # never set
+
+    monitor.terminal_event = MagicMock(side_effect=_unset_event)
+    return monitor
 
 
 # === ping() tests ===
@@ -111,201 +139,98 @@ class TestPing:
         assert result is False
 
 
-# === heartbeat threshold tests ===
-
-
-class TestHeartbeatThreshold:
-    @pytest.mark.asyncio
-    async def test_single_ping_failure_does_not_trip_threshold(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
-
-        client = _make_mock_client()
-        client.ping = AsyncMock(side_effect=[False, True, True, True])
-
-        spec = _make_spec()
-        executor = WorkflowExecutor(client, poll_interval=0.01)
-
-        # Monitor should complete normally; single ping failure should not trip threshold
-        state = await executor.execute(spec)
-        assert state.status == "completed"
-        assert state.connectivity_failed is False
-
-    @pytest.mark.asyncio
-    async def test_two_consecutive_ping_failures_trip_threshold(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
-
-        client = _make_mock_client()
-        # Two consecutive failures should trip threshold
-        client.ping = AsyncMock(side_effect=[False, False])
-        # Never complete tasks so we stay in monitoring
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "running"}])
-
-        spec = _make_spec()
-        executor = WorkflowExecutor(client, poll_interval=0.01)
-
-        state = await executor.execute(spec)
-        # The exception is caught and the workflow fails
-        assert state.status == "failed"
-        assert state.connectivity_failed is True
-
-
-# === end-to-end integration test ===
+# === event-bus connectivity loss (NATS) ===
 
 
 class TestMonitorConnectivity:
     @pytest.mark.asyncio
-    async def test_monitor_raises_connectivity_error_after_threshold(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
-
+    async def test_mid_workflow_disconnect_fails_workflow(self) -> None:
+        """A NATS disconnect mid-monitoring fails the workflow and flags
+        state.connectivity_failed (the event-driven successor to #161's
+        HTTP-heartbeat connectivity detection)."""
         client = _make_mock_client()
-        # Permanently failing ping
-        client.ping = AsyncMock(return_value=False)
-        # Never complete tasks
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "running"}])
-
         spec = _make_spec()
-        executor = WorkflowExecutor(client, poll_interval=0.01)
+        monitor = _disconnected_monitor()
 
-        state = await executor.execute(spec)
-        # The WorkflowConnectivityError is caught and the workflow fails
+        with patch("telemachy.executor.NatsMonitor", return_value=monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
         assert state.status == "failed"
         assert state.connectivity_failed is True
-        assert "consecutive health checks" in state.error
-
-
-# === heartbeat lifecycle tests ===
-
-
-class TestHeartbeatLifecycle:
-    @pytest.mark.asyncio
-    async def test_heartbeat_cancelled_on_normal_completion(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-
-        client = _make_mock_client()
-        client.ping = AsyncMock(return_value=True)
-        # Complete immediately
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "completed"}])
-
-        spec = _make_spec()
-        executor = WorkflowExecutor(client, poll_interval=0.01)
-
-        state = await executor.execute(spec)
-        assert state.status == "completed"
-        assert state.connectivity_failed is False
+        assert state.error is not None and "NATS connection lost" in state.error
 
     @pytest.mark.asyncio
-    async def test_heartbeat_returns_cleanly_on_connectivity_failure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
+    async def test_nats_unavailable_at_connect_fails_workflow(self) -> None:
+        """If NATS cannot be reached at all, the workflow fails fast."""
+        from telemachy.nats_monitor import NatsUnavailableError
 
         client = _make_mock_client()
-        # Two consecutive failures trip the threshold
-        client.ping = AsyncMock(side_effect=[False, False])
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "running"}])
-
         spec = _make_spec()
-        executor = WorkflowExecutor(client, poll_interval=0.01)
+        monitor = _create_mock_nats_monitor()
+        monitor.__aenter__.side_effect = NatsUnavailableError("NATS unreachable")
 
-        state = await executor.execute(spec)
-        # The heartbeat returns cleanly after tripping the threshold,
-        # and the error is caught in the main executor
+        with patch("telemachy.executor.NatsMonitor", return_value=monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
         assert state.status == "failed"
         assert state.connectivity_failed is True
+        assert "NATS" in (state.error or "")
 
 
-# === teardown policy regression tests ===
+# === teardown policy regression tests (#161) ===
 
 
 class TestTeardownPolicy:
     @pytest.mark.asyncio
-    async def test_connectivity_error_triggers_teardown_under_on_failure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
-
+    async def test_connectivity_error_triggers_teardown_under_on_failure(self) -> None:
         client = _make_mock_client()
-        client.ping = AsyncMock(side_effect=[False, False])
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "running"}])
-
         spec = _make_spec(teardown="on_failure")
-        executor = WorkflowExecutor(client, poll_interval=0.01)
+        monitor = _disconnected_monitor()
 
-        state = await executor.execute(spec)
-        # The exception becomes "failed" status, which matches the on_failure policy
+        with patch("telemachy.executor.NatsMonitor", return_value=monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
         assert state.status == "failed"
         assert state.connectivity_failed is True
-        # Verify teardown WAS called
         client.delete_agent.assert_called()
         client.delete_team.assert_called()
 
     @pytest.mark.asyncio
-    async def test_connectivity_error_triggers_teardown_under_on_completion(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_connectivity_error_triggers_teardown_under_on_completion(self) -> None:
         """Critical resource-leak regression test for issue #161.
 
         With teardown: on_completion (the default in workflows/example.yaml),
         a connectivity-induced failure must still trigger teardown.
         Without this, agents and teams leak.
         """
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
-
         client = _make_mock_client()
-        client.ping = AsyncMock(side_effect=[False, False])
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "running"}])
-
         spec = _make_spec(teardown="on_completion")
-        executor = WorkflowExecutor(client, poll_interval=0.01)
+        monitor = _disconnected_monitor()
 
-        state = await executor.execute(spec)
-        # The critical fix: connectivity failure should trigger teardown under on_completion
+        with patch("telemachy.executor.NatsMonitor", return_value=monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
         assert state.status == "failed"
         assert state.connectivity_failed is True
-        # Verify teardown WAS called (the critical fix for the resource leak)
+        # The critical fix: connectivity failure triggers teardown under on_completion.
         client.delete_agent.assert_called()
         client.delete_team.assert_called()
 
     @pytest.mark.asyncio
-    async def test_connectivity_error_skips_teardown_under_never(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_interval_seconds", 0.01)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_failure_threshold", 2)
-        monkeypatch.setattr("telemachy.executor.settings.healthcheck_timeout_seconds", 0.01)
-
+    async def test_connectivity_error_skips_teardown_under_never(self) -> None:
         client = _make_mock_client()
-        client.ping = AsyncMock(side_effect=[False, False])
-        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "running"}])
-
         spec = _make_spec(teardown="never")
-        executor = WorkflowExecutor(client, poll_interval=0.01)
+        monitor = _disconnected_monitor()
 
-        state = await executor.execute(spec)
-        # The workflow fails due to connectivity, but teardown is never called
+        with patch("telemachy.executor.NatsMonitor", return_value=monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
         assert state.status == "failed"
         assert state.connectivity_failed is True
-        # Verify teardown was NOT called
         client.delete_agent.assert_not_called()
         client.delete_team.assert_not_called()
