@@ -182,7 +182,7 @@ jobs:
           pixi-version: v0.70.2
           cache: true
       - name: Run pytest
-        run: pixi run pytest --tb=short -q --cov=telemachy --cov-report=term-missing
+        run: pixi run pytest --tb=short -q --cov=telemachy --cov-report=term-missing --cov-fail-under=75
 
   integration-tests:
     name: integration-tests
