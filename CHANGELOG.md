@@ -55,6 +55,12 @@ See `docs/backwards-compat.md`.
   and `agamemnon_list_team_tasks` so AI agents can query Agamemnon state
   during development. Closes #173.
 
+### Changed
+
+- pixi: expand `platforms` to `linux-64`, `osx-arm64`, `osx-64`, `win-64`
+  so contributors and operators on macOS and Windows can run
+  `pixi install` (#180).
+
 ### Changed (breaking)
 
 - `REQUIRE_TLS` env var now defaults to `true` (was `false`). Closes #158;
