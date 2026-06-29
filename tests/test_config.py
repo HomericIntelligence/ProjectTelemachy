@@ -1,10 +1,11 @@
-"""Tests for configuration settings."""
+"""Tests for configuration settings (#160)."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
+import pydantic
 import pytest
 
 from telemachy.config import Settings
@@ -177,6 +178,8 @@ class TestClientKwargs:
             "host_id",
             "require_tls",
             "nats_url",
+            "rate_limit_rps",
+            "rate_limit_burst",
         }
 
     def test_url_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -210,3 +213,36 @@ class TestModuleSingleton:
         kwargs = singleton.client_kwargs()
         assert isinstance(kwargs, dict)
         assert "url" in kwargs
+
+
+def test_rate_limit_defaults_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AGAMEMNON_RATE_LIMIT_RPS", raising=False)
+    monkeypatch.delenv("AGAMEMNON_RATE_LIMIT_BURST", raising=False)
+    s = Settings(_env_file=None)
+    assert s.agamemnon_rate_limit_rps == 0.0
+    assert s.agamemnon_rate_limit_burst == 16
+    kw = s.client_kwargs()
+    assert kw["rate_limit_rps"] == 0.0
+    assert kw["rate_limit_burst"] == 16
+
+
+def test_rate_limit_env_var_binding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AGAMEMNON_RATE_LIMIT_RPS env var actually binds (regression for prior NOGO)."""
+    monkeypatch.setenv("AGAMEMNON_RATE_LIMIT_RPS", "12.5")
+    monkeypatch.setenv("AGAMEMNON_RATE_LIMIT_BURST", "8")
+    s = Settings(_env_file=None)
+    assert s.agamemnon_rate_limit_rps == 12.5
+    assert s.agamemnon_rate_limit_burst == 8
+
+
+def test_rate_limit_burst_zero_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """burst=0 must raise ValidationError instead of silent clamp."""
+    monkeypatch.setenv("AGAMEMNON_RATE_LIMIT_BURST", "0")
+    with pytest.raises(pydantic.ValidationError):
+        Settings(_env_file=None)
+
+
+def test_rate_limit_burst_negative_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGAMEMNON_RATE_LIMIT_BURST", "-5")
+    with pytest.raises(pydantic.ValidationError):
+        Settings(_env_file=None)

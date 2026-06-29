@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import TypedDict
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,8 @@ class AgamemnonClientKwargs(TypedDict):
     host_id: str
     require_tls: bool
     nats_url: str
+    rate_limit_rps: float
+    rate_limit_burst: int
 
 
 class Settings(BaseSettings):
@@ -33,6 +35,8 @@ class Settings(BaseSettings):
 
     agamemnon_url: str = "http://localhost:8080"
     agamemnon_api_key: str = ""
+    agamemnon_rate_limit_rps: float = 0.0
+    agamemnon_rate_limit_burst: int = Field(default=16, ge=1)
     nats_url: str = "nats://localhost:4222"
     workflows_dir: Path = Path("workflows")
     host_id: str = "hermes"
@@ -64,6 +68,8 @@ class Settings(BaseSettings):
             "host_id": self.host_id,
             "require_tls": self.require_tls,
             "nats_url": self.nats_url,
+            "rate_limit_rps": self.agamemnon_rate_limit_rps,
+            "rate_limit_burst": self.agamemnon_rate_limit_burst,
         }
 
 

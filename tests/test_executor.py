@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time as _time
 from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -664,3 +665,52 @@ class TestIdempotency:
         state = await WorkflowExecutor(client, poll_interval=0.01).execute(spec)
         assert state.status == "failed"
         assert state.error is not None and "500" in state.error
+
+
+# ---------------------------------------------------------------------------
+# Tests: rate limiting under concurrent provisioning (#160)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_provision_respects_rate_limit_under_gather() -> None:
+    """20 agents under asyncio.gather + rate=20/s, burst=5 → elapsed in [0.6, 4.0]s.
+
+    Math: each agent issues two throttled calls (`create_agent` + `wake_agent`),
+    so 20 agents = 40 calls through `_request_with_retry`. At rate=20/burst=5
+    the minimum is (40 - 5) / 20 = 1.75s on the rate-limited side. Upper bound
+    widened to 4.0s to absorb CI variance and the single-vCPU edge case
+    flagged in the prior review.
+    """
+    from telemachy.agamemnon_client import AgamemnonClient
+
+    real_client = AgamemnonClient(
+        url="https://test.local",
+        require_tls=True,
+        rate_limit_rps=20.0,
+        rate_limit_burst=5,
+    )
+    real_client._client = MagicMock()
+    real_client._client.request = AsyncMock(
+        return_value=MagicMock(
+            status_code=201, is_error=False, json=lambda: {"agent": {"id": "a"}}, text=""
+        )
+    )
+
+    # Patch high-level methods to short-circuit team/task/monitor work
+    real_client.get_tasks = AsyncMock(return_value=[{"subject": "T", "status": "completed"}])
+    real_client.create_team = AsyncMock(return_value="team-1")
+    real_client.create_task = AsyncMock(return_value="task-1")
+
+    agents = [{"name": f"a{i}", "runtime": "local"} for i in range(20)]
+    spec = _make_spec(
+        agents=agents,
+        tasks=[{"subject": "T", "description": "...", "assign_to": "a0"}],
+        teardown="never",
+    )
+    executor = WorkflowExecutor(real_client, poll_interval=0.01)
+
+    start = _time.monotonic()
+    await executor.execute(spec)
+    elapsed = _time.monotonic() - start
+    assert 0.6 <= elapsed <= 4.0
