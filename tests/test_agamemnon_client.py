@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -255,3 +256,62 @@ async def test_create_agent_with_idempotency_name() -> None:
     assert call_args[1]["json"]["name"] == "tlm-abc123-worker"
     # Verify label preserves the original name
     assert call_args[1]["json"]["label"] == "worker"
+
+
+# ---------------------------------------------------------------------------
+# TEST 10 — Rate limiter throttles requests (#160)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_throttles_requests() -> None:
+    """5 RPS, burst=2, 3 sequential calls: 3rd must wait ~0.2s for refill.
+
+    Wide [0.12, 0.8] window for CI loop variance.
+    """
+    client = await _enter_client(rate_limit_rps=5.0, rate_limit_burst=2)
+    ok = _make_response(200, {"agents": []})
+    with patch.object(client._client, "request", new_callable=AsyncMock, return_value=ok):
+        start = time.monotonic()
+        await client.list_agents()
+        await client.list_agents()
+        await client.list_agents()  # waits for refill
+        elapsed = time.monotonic() - start
+    assert 0.12 <= elapsed <= 0.8
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_disabled_by_default() -> None:
+    client = await _enter_client()
+    assert not client._rate_limiter.enabled
+
+
+@pytest.mark.asyncio
+async def test_rate_limiter_applies_to_all_endpoints() -> None:
+    """Burst budget is SHARED across endpoints — single chokepoint at _request_with_retry."""
+    client = await _enter_client(rate_limit_rps=10.0, rate_limit_burst=1)
+    ok_list = _make_response(200, {"agents": []})
+    ok_post = _make_response(201, {"team": {"id": "t-1"}})
+    start = time.monotonic()
+    with patch.object(
+        client._client, "request", new_callable=AsyncMock, side_effect=[ok_list, ok_post]
+    ):
+        await client.list_agents()  # consumes the 1 burst token
+        await client.create_team("x", [])  # must wait ~0.1s for refill (10 RPS)
+    elapsed = time.monotonic() - start
+    assert 0.05 <= elapsed <= 0.6  # ±50% around 0.1s
+
+
+@pytest.mark.asyncio
+async def test_retry_backoff_capped_at_two_seconds() -> None:
+    """min(2**attempt, 2.0) — high attempts must not balloon backoff."""
+    client = await _enter_client()
+    # Force three 500s; with cap, sleeps are 1s + 2s = 3s, not 1s + 2s = 3s either way at 3 attempts.
+    err = _make_response(500, {"detail": "boom"})
+    with patch.object(client._client, "request", new_callable=AsyncMock, return_value=err):
+        start = time.monotonic()
+        with pytest.raises(AgamemnonError):
+            await client._request_with_retry("GET", "/v1/agents")
+        elapsed = time.monotonic() - start
+    # 3 attempts → 2 backoffs of 1s and 2s → ~3s; ceiling test allows slack.
+    assert elapsed <= 4.5

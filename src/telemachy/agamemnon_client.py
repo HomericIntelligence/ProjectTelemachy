@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from telemachy.models import AgentSpec, TaskSpec
+from telemachy.rate_limiter import TokenBucket
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,8 @@ class AgamemnonClient:
         host_id: str = "hermes",
         require_tls: bool = False,
         nats_url: str = "",
+        rate_limit_rps: float = 0.0,
+        rate_limit_burst: int = 16,
     ) -> None:
         if require_tls:
             if not url.startswith("https://"):
@@ -61,6 +64,7 @@ class AgamemnonClient:
                 )
         self._base_url = url.rstrip("/")
         self._host_id = host_id
+        self._rate_limiter = TokenBucket(rate=rate_limit_rps, burst=rate_limit_burst)
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
@@ -108,6 +112,10 @@ class AgamemnonClient:
     ) -> httpx.Response:
         """Issue an HTTP request, retrying on server errors and transient failures.
 
+        Each attempt waits for the outbound rate-limit bucket (#160) before
+        contacting Agamemnon. Default config (rate=0) is a no-op.
+        Retry backoff is capped at 2.0s per `nats-publish-retry-backoff`.
+
         Retries on:
         - 5xx server errors
         - 429 Too Many Requests (rate-limit) — see #165
@@ -115,6 +123,7 @@ class AgamemnonClient:
         """
         last_exc: Exception | None = None
         for attempt in range(max_attempts):
+            await self._rate_limiter.acquire()
             try:
                 resp = await self._http.request(method, url, **kwargs)
                 if resp.status_code == 429:
@@ -126,7 +135,10 @@ class AgamemnonClient:
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exc = e
             if attempt < max_attempts - 1:
-                await asyncio.sleep(2**attempt)
+                # Exponential backoff, capped at 2.0s so a future increase of
+                # max_attempts cannot produce unbounded per-retry sleeps that
+                # would fight the outbound rate limiter (#160, on-theme).
+                await asyncio.sleep(min(2**attempt, 2.0))
         raise AgamemnonError(0, f"Request failed after {max_attempts} attempts: {last_exc}")
 
     # === Agent endpoints ===

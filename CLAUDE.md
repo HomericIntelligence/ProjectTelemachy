@@ -54,6 +54,7 @@ replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
 
 - `telemachy/models.py` — Pydantic models for the workflow schema (AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState)
 - `telemachy/agamemnon_client.py` — Async HTTP client wrapping all ProjectAgamemnon REST endpoints used
+- `telemachy/rate_limiter.py` — Async token-bucket rate limiter for throttling outbound HTTP calls (#160)
 - `telemachy/executor.py` — Orchestrates the full workflow lifecycle: provision → assign tasks → monitor → teardown
 - `telemachy/cli.py` — Typer CLI (`run`, `plan`, `status`, `validate`, `list`, `cancel`)
 - `telemachy/config.py` — Settings loaded from environment / `.env`
@@ -220,6 +221,8 @@ path that covers permissions, runner labels, and secrets references.
 | --- | --- | --- |
 | `AGAMEMNON_URL` | `http://localhost:8080` | ProjectAgamemnon base URL |
 | `AGAMEMNON_API_KEY` | `` | API key (if auth enabled) |
+| `AGAMEMNON_RATE_LIMIT_RPS` | `0` | Token-bucket refill rate (requests/sec) for outbound Agamemnon calls. `0` disables throttling. |
+| `AGAMEMNON_RATE_LIMIT_BURST` | `16` | Maximum burst size for the token bucket. Must be `>= 1`; `0` or negative is rejected at startup. |
 | `NATS_URL` | `nats://localhost:4222` | NATS server URL. Forwarded to `AgamemnonClient` and validated against `tls://` scheme when `REQUIRE_TLS=true`. **Not yet used to subscribe to events** — reserved for the planned NATS subscriber (#92). |
 | `WORKFLOWS_DIR` | `workflows` | Directory to search for workflow YAML files |
 | `HOST_ID` | `hermes` | Host identifier embedded in Agamemnon task assignments |
