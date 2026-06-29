@@ -59,11 +59,6 @@ class WorkflowExecutor:
             "on_workflow_complete": [],
             "on_workflow_failed": [],
         }
-        # Subjects of tasks for which we have already emitted a terminal event.
-        # Declared here (rather than lazily via getattr/setattr in _monitor_completion)
-        # so the attribute lifecycle is per-instance, statically typed, and fresh
-        # each execute() call starts with a clean set per executor.
-        self._emitted_task_events: set[str] = set()
 
     def add_hook(self, event: str, callback: Callable[..., Any]) -> None:
         """Register a callback for a workflow execution event.
@@ -85,9 +80,9 @@ class WorkflowExecutor:
 
     async def execute(self, spec: WorkflowSpec) -> WorkflowState:
         """Run a full workflow: provision → assign tasks → monitor → teardown."""
-        # Reset per-execution state so reusing the same executor for a second
-        # workflow does not leak emitted-event subjects from the prior run (#203).
-        self._emitted_task_events = set()
+        # Emitted-event subjects are scoped to each monitor session (local set
+        # in _monitor_completion), so no per-execution instance reset is needed
+        # — reusing the same executor cannot leak prior-run subjects (#162/#203).
         timeout = (
             spec.timeout_seconds
             if spec.timeout_seconds is not None
@@ -408,13 +403,20 @@ class WorkflowExecutor:
     # === Monitoring ===
 
     async def _monitor_completion(self, state: WorkflowState) -> None:
-        """Poll all team tasks until every task reaches a terminal status."""
+        """Poll all team tasks until every task reaches a terminal status.
+
+        The set of subjects for which we've already emitted a terminal-state
+        callback is scoped to this single monitoring session (#162) — invoking
+        _monitor_completion again starts with a fresh set, so duplicate task
+        subjects across separate runs each get their callbacks.
+        """
         logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
 
         poll_count = 0
         start_time = time.monotonic()
         timeout = settings.monitor_timeout_seconds
         max_polls = settings.monitor_max_polls
+        emitted_done: set[str] = set()
 
         while True:
             if self._stop_event and self._stop_event.is_set():
@@ -438,10 +440,6 @@ class WorkflowExecutor:
 
             all_done = True
             any_failed = False
-            # Track which tasks already emitted events to avoid duplicate callbacks.
-            # Backed by self._emitted_task_events (initialised in __init__,
-            # reset in execute()) — see #197 / #203.
-            emitted_done = self._emitted_task_events
 
             for team_name, team_id in state.created_teams.items():
                 tasks = await self._client.get_tasks(team_id)
