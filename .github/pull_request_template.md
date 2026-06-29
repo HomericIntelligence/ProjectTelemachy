@@ -31,7 +31,8 @@ the GitHub UI sidebar after the PR is opened.
 - [ ] Linting passes (`just lint`).
 - [ ] Tested locally with `just validate workflows/example.yaml`.
 - [ ] New conditional branches have new tests (see `docs/definition-of-done.md`).
-- [ ] `CHANGELOG.md` `Unreleased` entry added if user-visible.
+- [ ] `CHANGELOG.md` `Unreleased` entry added if user-visible (see
+  `CONTRIBUTING.md` → Changelog discipline), or this PR is internal-only.
 
 ## Risk and rollout
 
