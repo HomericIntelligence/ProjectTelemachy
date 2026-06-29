@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sdist+wheel on `v*.*.*` tag pushes, cross-checks the tag against
   `pyproject.toml` and `__init__.py`, attaches artifacts to a GitHub
   Release with changelog-derived notes, and publishes to PyPI via
-  Trusted Publishing. Closes #153; part of #92.
+  Trusted Publishing. Closes #153, #176; part of #92.
 - `docs/ROADMAP.md`, ADR-003, and `v0.1.0`/`v0.2.0`/`v1.0.0` GitHub
   milestones establishing the canonical planning artefact for
   ProjectTelemachy. Regression-tested by `tests/test_roadmap.py`.

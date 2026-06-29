@@ -11,9 +11,12 @@ Versions appear in:
 2. `src/telemachy/__init__.py` — `__version__` constant.
 3. `CHANGELOG.md` — `## [X.Y.Z] - YYYY-MM-DD` heading.
 
-All three must agree at release time. A CI sync check exists (see
-`workflows/`) but is currently advisory; the release author is responsible
-for keeping them aligned.
+All three must agree at release time. The `deps-version-sync` job in
+`.github/workflows/_required.yml` enforces this on every PR by parsing
+`pyproject.toml` and `src/telemachy/__init__.py` with `ast.literal_eval`
+and exiting non-zero on mismatch. The release workflow's
+`verify-version` job (`.github/workflows/release.yml:16-62`) is the
+second-layer check that the pushed tag agrees with both sources.
 
 ## Versioning policy
 

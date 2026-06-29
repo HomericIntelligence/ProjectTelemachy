@@ -40,3 +40,9 @@ htmlcov/
 # Build artifacts
 *.whl
 *.tar.gz
+
+# Agent scaffolding (Claude tooling scratch files must not be committed)
+.claude-followup-*.md
+.claude-followup-*.json
+.claude-prompt-*.md
+.claude-pr-review-*.md
