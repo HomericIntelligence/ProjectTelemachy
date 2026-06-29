@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
-          pixi-version: v0.67.2
+          pixi-version: v0.70.2
           cache: true
       - name: Resolve target version from tag
         id: resolve
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
       - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
-          pixi-version: v0.67.2
+          pixi-version: v0.70.2
           cache: true
       - name: Build sdist and wheel
         run: |
