@@ -36,6 +36,8 @@ class WorkflowExecutor:
         dry_run: bool = False,
         stop_event: asyncio.Event | None = None,
         max_concurrent_provisioning: int = 16,
+        force: bool = False,
+        existing_snapshot: tuple[list[dict[str, object]], list[dict[str, object]]] | None = None,
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
@@ -45,6 +47,12 @@ class WorkflowExecutor:
         # agents does not overwhelm Agamemnon (#166). Default 16 matches
         # typical small-fleet sizing; callers can raise/lower as needed.
         self._provision_semaphore = asyncio.Semaphore(max(1, max_concurrent_provisioning))
+        self._force = force
+        # If the caller already fetched list_agents()/list_teams() (e.g. cli.run for
+        # the --force warning), reuse that snapshot to avoid a second API round-trip.
+        self._injected_snapshot = existing_snapshot
+        self._existing_agents_by_key: dict[str, str] = {}
+        self._existing_teams_by_key: dict[str, str] = {}
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -106,12 +114,32 @@ class WorkflowExecutor:
         try:
             state.status = "running"
 
+            # Populate idempotency lookup tables (skipped on dry-run or force).
+            if not self._dry_run and not self._force:
+                if self._injected_snapshot is not None:
+                    agents_snapshot, teams_snapshot = self._injected_snapshot
+                else:
+                    agents_snapshot = await self._client.list_agents()
+                    teams_snapshot = await self._client.list_teams()
+                self._existing_agents_by_key = {
+                    str(a.get("name", "")): str(a.get("id", ""))
+                    for a in agents_snapshot
+                    if a.get("name") and a.get("id")
+                }
+                self._existing_teams_by_key = {
+                    str(t.get("name", "")): str(t.get("id", ""))
+                    for t in teams_snapshot
+                    if t.get("name") and t.get("id")
+                }
+
             # Provision all agents concurrently (partial results saved into state
             # so teardown can clean up even if provisioning partially fails)
-            state.created_agents = await self._provision_agents(spec.agents, state)
+            state.created_agents = await self._provision_agents(spec.agents, spec.name, state)
 
             # Create teams and submit tasks (respecting dependencies)
-            state.created_teams = await self._create_teams(spec.teams, state.created_agents)
+            state.created_teams = await self._create_teams(
+                spec.teams, state.created_agents, spec.name
+            )
 
             # Monitor until all tasks reach a terminal state (skipped in dry-run)
             if not self._dry_run:
@@ -152,6 +180,7 @@ class WorkflowExecutor:
     async def _provision_agents(
         self,
         agents: list[AgentSpec],
+        workflow_name: str,
         state: WorkflowState,
     ) -> dict[str, str]:
         """Create all agents concurrently. Returns {agent_name: agamemnon_id}.
@@ -163,7 +192,7 @@ class WorkflowExecutor:
 
         async def _bounded(agent: AgentSpec) -> tuple[str, str]:
             async with self._provision_semaphore:
-                return await self._provision_one_agent(agent)
+                return await self._provision_one_agent(agent, workflow_name)
 
         coros = [_bounded(agent) for agent in agents]
         raw_results: list[tuple[str, str] | BaseException] = await asyncio.gather(
@@ -185,14 +214,48 @@ class WorkflowExecutor:
         logger.info("All agents provisioned: %s", id_map)
         return id_map
 
-    async def _provision_one_agent(self, spec: AgentSpec) -> tuple[str, str]:
-        """Create a single agent and wake it. Returns (name, agamemnon_id)."""
+    async def _provision_one_agent(self, spec: AgentSpec, workflow_name: str) -> tuple[str, str]:
+        """Create a single agent and wake it. Returns (name, agamemnon_id).
+
+        If an agent with this workflow's idempotency key already exists, reuse it.
+        """
+        from telemachy.idempotency import make_key
+
         if self._dry_run:
             dry_id = f"dry-run-agent-{spec.name}"
             logger.info("[dry-run] Would create agent '%s' → id=%s", spec.name, dry_id)
             return spec.name, dry_id
-        agent_id = await self._client.create_agent(spec)
-        logger.debug("Created agent '%s' → id=%s", spec.name, agent_id)
+
+        key = make_key(workflow_name, spec.name)
+        existing_id = self._existing_agents_by_key.get(key)
+        if existing_id and not self._force:
+            logger.info(
+                "Reusing existing agent '%s' (id=%s, key=%s)",
+                spec.name,
+                existing_id,
+                key,
+            )
+            # The reused agent may already be running. wake_agent maps to
+            # POST /v1/agents/{id}/start; tolerate already-running responses by
+            # swallowing only conflict-shaped AgamemnonError (status 409, or 400
+            # with a recognisable message). Anything else re-raises.
+            try:
+                await self._client.wake_agent(existing_id)
+            except AgamemnonError as exc:
+                already_running = exc.status_code == 409 or (
+                    exc.status_code == 400 and "running" in str(exc).lower()
+                )
+                if not already_running:
+                    raise
+                logger.info(
+                    "Agent '%s' (id=%s) was already running; reuse continues",
+                    spec.name,
+                    existing_id,
+                )
+            return spec.name, existing_id
+
+        agent_id = await self._client.create_agent(spec, idempotency_name=key)
+        logger.debug("Created agent '%s' → id=%s (key=%s)", spec.name, agent_id, key)
         await self._client.wake_agent(agent_id)
         logger.debug("Woke agent '%s' (id=%s)", spec.name, agent_id)
         return spec.name, agent_id
@@ -203,6 +266,7 @@ class WorkflowExecutor:
         self,
         teams: list[TeamSpec],
         agent_ids: dict[str, str],
+        workflow_name: str,
     ) -> dict[str, str]:
         """Create all teams concurrently and submit tasks respecting dependencies.
 
@@ -210,7 +274,7 @@ class WorkflowExecutor:
         Returns {team_name: team_id}.
         """
         results: list[tuple[str, str]] = await asyncio.gather(
-            *[self._create_team(team_spec, agent_ids) for team_spec in teams]
+            *[self._create_team(team_spec, agent_ids, workflow_name) for team_spec in teams]
         )
         return dict(results)
 
@@ -218,8 +282,11 @@ class WorkflowExecutor:
         self,
         team_spec: TeamSpec,
         agent_ids: dict[str, str],
+        workflow_name: str,
     ) -> tuple[str, str]:
         """Create a single team, submit its tasks, and return (team_name, team_id)."""
+        from telemachy.idempotency import make_key
+
         if self._dry_run:
             dry_id = f"dry-run-team-{team_spec.name}"
             logger.info("[dry-run] Would create team '%s' → id=%s", team_spec.name, dry_id)
@@ -231,9 +298,21 @@ class WorkflowExecutor:
                     task_spec.blocked_by,
                 )
             return team_spec.name, dry_id
+
         member_ids = [agent_ids[name] for name in team_spec.agents]
-        team_id = await self._client.create_team(team_spec.name, member_ids)
-        logger.info("Created team '%s' → id=%s", team_spec.name, team_id)
+        key = make_key(workflow_name, team_spec.name)
+        existing_id = self._existing_teams_by_key.get(key)
+        if existing_id and not self._force:
+            logger.info(
+                "Reusing existing team '%s' (id=%s, key=%s); membership not reconciled",
+                team_spec.name,
+                existing_id,
+                key,
+            )
+            team_id = existing_id
+        else:
+            team_id = await self._client.create_team(key, member_ids)
+            logger.info("Created team '%s' → id=%s (key=%s)", team_spec.name, team_id, key)
         await self._submit_tasks_with_deps(team_id, team_spec, agent_ids)
         return team_spec.name, team_id
 
@@ -252,7 +331,25 @@ class WorkflowExecutor:
         completed_subjects: set[str] = set()
         failed_subjects: set[str] = set()
         skipped_subjects: set[str] = set()
-        pending = list(team_spec.tasks)
+
+        if not self._force:
+            existing = await self._client.get_tasks(team_id)
+            for t in existing:
+                subj = str(t.get("subject", ""))
+                tid = str(t.get("id", ""))
+                status = str(t.get("status", ""))
+                if subj and tid:
+                    submitted[subj] = tid
+                    if status == "completed":
+                        completed_subjects.add(subj)
+                    elif status in {"failed", "error", "cancelled"}:
+                        failed_subjects.add(subj)
+            if submitted:
+                logger.info(
+                    "Reusing %d existing task(s) in team %s", len(submitted), team_spec.name
+                )
+
+        pending = [t for t in team_spec.tasks if t.subject not in submitted]
 
         while pending:
             # Skip tasks whose dependencies have failed
@@ -420,8 +517,14 @@ async def run_workflow(
     spec: WorkflowSpec,
     dry_run: bool = False,
     stop_event: asyncio.Event | None = None,
+    force: bool = False,
 ) -> WorkflowState:
     """Convenience function: create a client from settings and execute a workflow."""
     async with AgamemnonClient(**settings.client_kwargs()) as client:
-        executor = WorkflowExecutor(client, dry_run=dry_run, stop_event=stop_event)
+        executor = WorkflowExecutor(
+            client,
+            dry_run=dry_run,
+            stop_event=stop_event,
+            force=force,
+        )
         return await executor.execute(spec)

@@ -98,6 +98,22 @@ teardown: on_completion   # on_completion | on_failure | never
 - `on_failure` — delete only on failure (preserve state on success for inspection)
 - `never` — never auto-teardown; manual cleanup required
 
+## Idempotency
+
+Telemachy tags every agent and team it creates with a `tlm-<workflow>-<resource>` key stored in
+Agamemnon. When a workflow is re-run (e.g. after a partial failure), resources whose keys already
+exist in Agamemnon are reused rather than re-created, making retries safe by default.
+
+**Team membership caveat:** When a team is reused from a prior run, its member list is trusted
+verbatim from Agamemnon and is not reconciled against the current workflow spec. If a partial prior
+run left a team with stale agent IDs (e.g. because an agent was re-created under a new ID), the
+reused team will still point at the old agent ID and the freshly-created member will not be wired
+in. Use `--force` to force creation of fresh resources and avoid this inconsistency:
+
+```bash
+just run workflows/example.yaml -- --force
+```
+
 ## Development
 
 ```bash

@@ -131,15 +131,17 @@ class AgamemnonClient:
 
     # === Agent endpoints ===
 
-    async def create_agent(self, spec: AgentSpec) -> str:
+    async def create_agent(self, spec: AgentSpec, idempotency_name: str | None = None) -> str:
         """Create a local or docker agent. Returns the Agamemnon agent id."""
         if spec.runtime == "docker":
-            return await self._create_docker_agent(spec)
-        return await self._create_local_agent(spec)
+            return await self._create_docker_agent(spec, idempotency_name)
+        return await self._create_local_agent(spec, idempotency_name)
 
-    async def _create_local_agent(self, spec: AgentSpec) -> str:
+    async def _create_local_agent(
+        self, spec: AgentSpec, idempotency_name: str | None = None
+    ) -> str:
         payload: dict[str, object] = {
-            "name": spec.name,
+            "name": idempotency_name or spec.name,
             "label": spec.name,
             "program": spec.program,
             "workingDirectory": spec.working_dir,
@@ -152,9 +154,11 @@ class AgamemnonClient:
         self._raise_for_status(response)
         return str(_require(response.json(), "agent", "id", context="create_agent"))
 
-    async def _create_docker_agent(self, spec: AgentSpec) -> str:
+    async def _create_docker_agent(
+        self, spec: AgentSpec, idempotency_name: str | None = None
+    ) -> str:
         payload: dict[str, object] = {
-            "name": spec.name,
+            "name": idempotency_name or spec.name,
             "hostId": self._host_id,
             "image": spec.docker_image,
             "cpus": spec.cpus,
@@ -187,6 +191,13 @@ class AgamemnonClient:
         self._raise_for_status(response)
         agents: list[dict[str, object]] = response.json().get("agents", [])
         return agents
+
+    async def list_teams(self) -> list[dict[str, object]]:
+        """List all teams. Used to detect prior idempotent provisioning."""
+        response = await self._request_with_retry("GET", "/v1/teams")
+        self._raise_for_status(response)
+        teams: list[dict[str, object]] = response.json().get("teams", [])
+        return teams
 
     # === Team endpoints ===
 
