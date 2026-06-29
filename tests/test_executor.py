@@ -940,7 +940,7 @@ async def test_workflow_id_propagates_into_gather_children() -> None:
 
     recorded_ids: list[str] = []
 
-    async def capture_id(*_: object) -> tuple[str, str]:
+    async def capture_id(*_: object, **__: object) -> tuple[str, str]:
         recorded_ids.append(workflow_id_var.get("-"))
         return "test-agent", "agent-id"
 
