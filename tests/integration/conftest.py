@@ -96,6 +96,9 @@ def _install_routes(router: respx.MockRouter, state: MockAgamemnonState) -> None
     def list_agents(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"agents": list(state.agents.values())})
 
+    def list_teams(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"teams": list(state.teams.values())})
+
     def create_team(request: httpx.Request) -> httpx.Response:
         body = _read_json(request)
         tid = state.new_id("team")
@@ -169,6 +172,7 @@ def _install_routes(router: respx.MockRouter, state: MockAgamemnonState) -> None
     router.post(url__regex=r"http://mock-agamemnon/v1/agents/[^/]+/stop$", name="stop_agent").mock(side_effect=stop_agent)
     router.delete(url__regex=r"http://mock-agamemnon/v1/agents/[^/]+$", name="delete_agent").mock(side_effect=delete_agent)
     router.get("http://mock-agamemnon/v1/agents", name="list_agents").mock(side_effect=list_agents)
+    router.get("http://mock-agamemnon/v1/teams", name="list_teams").mock(side_effect=list_teams)
     router.post("http://mock-agamemnon/v1/teams", name="create_team").mock(side_effect=create_team)
     router.put(url__regex=r"http://mock-agamemnon/v1/teams/[^/]+$", name="set_team_members").mock(side_effect=set_team_members)
     router.delete(url__regex=r"http://mock-agamemnon/v1/teams/[^/]+$", name="delete_team").mock(side_effect=delete_team)
