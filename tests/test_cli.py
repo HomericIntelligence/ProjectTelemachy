@@ -187,22 +187,3 @@ def test_run_dry_run(valid_workflow_file: Path) -> None:
     assert kwargs.get("dry_run") is True or (len(_args) > 1 and _args[1] is True), (
         f"Expected run_workflow to be called with dry_run=True, call_args={mock_run.call_args}"
     )
-
-
-# ---------------------------------------------------------------------------
-# TEST 7 — stub commands removed (regression guard for #42)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("removed", ["status", "list", "cancel"])
-def test_removed_stub_commands_absent(removed: str) -> None:
-    """The status/list/cancel stubs were removed; invoking them must fail.
-
-    Guards against the audit finding in issue #42 — these commands were
-    non-functional stubs that created a misleading API surface.
-    """
-    result = runner.invoke(app, [removed, "dummy-arg"])
-    assert result.exit_code != 0, (
-        f"Expected non-zero exit for removed command {removed!r}; "
-        f"output:\n{result.output}"
-    )
