@@ -111,7 +111,7 @@ Verify every `runs-on:` uses a standard GitHub-hosted label:
 ### Check 3: Secrets References
 
 ```bash
-grep -oE '\$\{\{\s*secrets\.[A-Z_]+\s*\}\}' .github/workflows/ci.yml | sed 's/.*secrets\.//' | sed 's/\s*}}.*//' | sort -u
+grep -oE '\$\{\{[[:space:]]*secrets\.[A-Z_]+[[:space:]]*\}\}' .github/workflows/ci.yml | sed 's/.*secrets\.//' | sed 's/[[:space:]]*}}.*//' | sort -u
 ```
 
 Compare the referenced secret names against the configured secrets in the repo:
@@ -149,7 +149,7 @@ the issue is likely a GitHub Actions infrastructure problem or a runner-environm
 1. **Invalid action SHA or version** (most common)
    - A pinned action reference points to a commit SHA or tag that no longer exists
    - Fix: update the action pin to a valid version, usually via Dependabot PR
-   - Example: PR #244 bumped `prefix-dev/setup-pixi` to v0.9.6
+   - Example: PR #235 bumped `prefix-dev/setup-pixi` to v0.9.5.
 
 2. **Missing or misconfigured secret**
    - A step requires an environment variable or input that sources a secret, but the secret is not configured in the repo
