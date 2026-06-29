@@ -29,13 +29,15 @@ async def test_full_lifecycle_provisions_then_tears_down(mock_agamemnon) -> None
     assert payload_contains(
         payload,
         {
-            "name": "worker",
+            # `name` carries the workflow-scoped idempotency key (tlm-<hash>-worker),
+            # while `label` stays the human-readable agent name.
             "label": "worker",
             "program": "claude-code",
             "workingDirectory": "/tmp",
             "taskDescription": "Telemachy-managed agent: worker",
         },
     )
+    assert str(payload["name"]).endswith("worker")
     # Task-creation payload uses RESOLVED agent id, not the name.
     task_payload = json.loads(router["create_task"].calls.last.request.read())
     assert payload_contains(
@@ -92,8 +94,10 @@ async def test_docker_agent_routes_to_docker_endpoint(mock_agamemnon) -> None:
     payload = json.loads(router["create_docker_agent"].calls.last.request.read())
     assert payload_contains(
         payload,
-        {"name": "worker", "image": "img:1", "cpus": 2, "memory": "4g"},
+        {"image": "img:1", "cpus": 2, "memory": "4g"},
     )
+    # `name` carries the workflow-scoped idempotency key (tlm-<hash>-worker).
+    assert str(payload["name"]).endswith("worker")
 
 
 async def test_update_task_drives_put_route(mock_agamemnon) -> None:
