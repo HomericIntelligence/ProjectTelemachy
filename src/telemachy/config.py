@@ -52,6 +52,8 @@ class Settings(BaseSettings):
         default=Path.home() / ".telemachy" / "state",
         validation_alias=AliasChoices("TELEMACHY_STATE_DIR", "STATE_DIR"),
     )
+    audit_log_path: str | None = None
+    audit_hash_chain: bool = True
 
     @model_validator(mode="after")
     def _warn_if_tls_disabled(self) -> Settings:

@@ -197,6 +197,7 @@ def run(
                 )
 
             async with AgamemnonClient(**settings.client_kwargs()) as client:
+                from telemachy.audit import build_sink_from_settings
                 from telemachy.state_store import FileStateStore
 
                 # Take ONE snapshot, use it for both the --force warning AND
@@ -221,6 +222,7 @@ def run(
                         )
 
                 store = FileStateStore(settings.state_dir)
+                sink = build_sink_from_settings()
                 workflow_id = str(uuid.uuid4())[:8]
                 console.print(f"[dim]workflow id:[/dim] {workflow_id}")
 
@@ -240,6 +242,7 @@ def run(
                         force=force,
                         existing_snapshot=snapshot,
                         state_writer=store.save,
+                        sink=sink,
                     )
                     executor.add_hook("on_task_complete", _on_task_complete)
                     result = await executor.execute(spec, workflow_id=workflow_id)
