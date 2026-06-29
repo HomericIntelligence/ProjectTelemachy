@@ -43,6 +43,7 @@ class WorkflowExecutor:
         max_concurrent_provisioning: int = 16,
         force: bool = False,
         existing_snapshot: tuple[list[dict[str, object]], list[dict[str, object]]] | None = None,
+        state_writer: Callable[[WorkflowState], None] | None = None,
     ) -> None:
         self._client = client
         self._poll_interval = poll_interval
@@ -58,6 +59,7 @@ class WorkflowExecutor:
         self._injected_snapshot = existing_snapshot
         self._existing_agents_by_key: dict[str, str] = {}
         self._existing_teams_by_key: dict[str, str] = {}
+        self._state_writer = state_writer
         self._hooks: dict[str, list[Callable[..., Any]]] = {
             "on_task_complete": [],
             "on_task_failed": [],
@@ -75,6 +77,15 @@ class WorkflowExecutor:
             raise ValueError(f"Unknown hook event {event!r}. Valid events: {sorted(self._hooks)}")
         self._hooks[event].append(callback)
 
+    def _persist(self, state: WorkflowState) -> None:
+        """Invoke the state_writer callback if registered. Swallow + log errors."""
+        if self._state_writer is None:
+            return
+        try:
+            self._state_writer(state)
+        except Exception as exc:  # noqa: BLE001 — persistence must not crash a run
+            logger.warning("state persistence failed: %s", exc)
+
     async def _emit(self, event: str, **kwargs: Any) -> None:
         """Fire all callbacks registered for *event*."""
         for cb in self._hooks.get(event, []):
@@ -83,7 +94,7 @@ class WorkflowExecutor:
             else:
                 cb(**kwargs)
 
-    async def execute(self, spec: WorkflowSpec) -> WorkflowState:
+    async def execute(self, spec: WorkflowSpec, workflow_id: str | None = None) -> WorkflowState:
         """Run a full workflow: provision → assign tasks → monitor → teardown."""
         # Emitted-event subjects are scoped to each monitor session (local set
         # in _monitor_completion), so no per-execution instance reset is needed
@@ -94,25 +105,27 @@ class WorkflowExecutor:
             else settings.default_workflow_timeout
         )
         try:
-            return await asyncio.wait_for(self._run(spec), timeout=timeout)
+            return await asyncio.wait_for(self._run(spec, workflow_id), timeout=timeout)
         except TimeoutError as exc:
             raise WorkflowTimeoutError(
                 f"Workflow '{spec.name}' exceeded its execution timeout of {timeout}s"
             ) from exc
 
-    async def _run(self, spec: WorkflowSpec) -> WorkflowState:
+    async def _run(self, spec: WorkflowSpec, workflow_id: str | None = None) -> WorkflowState:
         """Internal execution body — wrapped by execute() with a timeout."""
-        workflow_id = str(uuid.uuid4())[:8]
+        workflow_id = workflow_id or str(uuid.uuid4())[:8]
         state = WorkflowState(
             workflow_id=workflow_id,
             spec=spec,
             status="pending",
             started_at=_now(),
         )
+        self._persist(state)
         logger.info("Starting workflow '%s' (id=%s)", spec.name, workflow_id)
 
         try:
             state.status = "running"
+            self._persist(state)
 
             # Populate idempotency lookup tables (skipped on dry-run or force).
             if not self._dry_run and not self._force:
@@ -136,11 +149,13 @@ class WorkflowExecutor:
             # internal id_map to state.created_agents up front so teardown sees
             # every successfully-created agent even on partial failure (#164).
             await self._provision_agents(spec.agents, spec.name, state)
+            self._persist(state)
 
             # Create teams and submit tasks (respecting dependencies)
             state.created_teams = await self._create_teams(
                 spec.teams, state.created_agents, spec.name
             )
+            self._persist(state)
 
             # Monitor until all tasks reach a terminal state (skipped in dry-run)
             if not self._dry_run:
@@ -162,6 +177,7 @@ class WorkflowExecutor:
             state.status = "cancelled"
             state.completed_at = _now()
             logger.warning("Workflow '%s' was cancelled", spec.name)
+            self._persist(state)
             raise
 
         except Exception as exc:
@@ -172,6 +188,7 @@ class WorkflowExecutor:
             await self._emit("on_workflow_failed", state=state, error=exc)
 
         finally:
+            self._persist(state)
             await self._teardown(state)
 
         return state

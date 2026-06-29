@@ -613,7 +613,7 @@ class TestWorkflowTimeout:
 
         executor = WorkflowExecutor(client, poll_interval=0.01)
 
-        async def slow_run(_spec: object) -> object:
+        async def slow_run(_spec: object, _workflow_id: object = None) -> object:
             import asyncio as _a
 
             await _a.sleep(10)
@@ -795,3 +795,60 @@ async def test_provision_respects_rate_limit_under_gather() -> None:
     await executor.execute(spec)
     elapsed = _time.monotonic() - start
     assert 0.6 <= elapsed <= 4.0
+
+
+# ---------------------------------------------------------------------------
+# Tests: state persistence
+# ---------------------------------------------------------------------------
+
+
+class TestStatePersistence:
+    @pytest.mark.asyncio
+    async def test_state_writer_called_at_each_transition(self) -> None:
+        """state_writer fires for pending, running, and completed."""
+        saved_statuses: list[str] = []
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01, state_writer=lambda s: saved_statuses.append(s.status))
+        spec = _make_spec()
+        await executor.execute(spec)
+        assert saved_statuses[0] == "pending"
+        assert "running" in saved_statuses
+        assert saved_statuses[-1] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_execute_accepts_workflow_id_override(self) -> None:
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        spec = _make_spec()
+        result = await executor.execute(spec, workflow_id="custom-42")
+        assert result.workflow_id == "custom-42"
+
+    @pytest.mark.asyncio
+    async def test_stop_event_triggers_cancelled_status_and_persists(self) -> None:
+        """stop_event → state.status='cancelled' AND disk reflects it."""
+        import asyncio as _a
+
+        saved_statuses: list[str] = []
+        stop = _a.Event()
+        stop.set()
+        client = _make_mock_client()
+        executor = WorkflowExecutor(
+            client, poll_interval=0.01, stop_event=stop,
+            state_writer=lambda s: saved_statuses.append(s.status),
+        )
+        spec = _make_spec(teardown="never")
+        result = await executor.execute(spec)
+        assert result.status == "cancelled"
+        assert "cancelled" in saved_statuses
+
+    @pytest.mark.asyncio
+    async def test_state_writer_exception_does_not_crash_workflow(self) -> None:
+        """If state_writer raises, the workflow continues."""
+        def broken_writer(_s: object) -> None:
+            raise OSError("disk full")
+
+        client = _make_mock_client()
+        executor = WorkflowExecutor(client, poll_interval=0.01, state_writer=broken_writer)
+        spec = _make_spec()
+        result = await executor.execute(spec)
+        assert result.status == "completed"

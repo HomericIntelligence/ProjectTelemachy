@@ -187,6 +187,7 @@ class WorkflowSpec(BaseModel):
 class WorkflowState(BaseModel):
     """Runtime state for a workflow execution."""
 
+    schema_version: int = 1
     workflow_id: str
     spec: WorkflowSpec
     status: Literal["pending", "running", "completed", "failed", "cancelled"]
