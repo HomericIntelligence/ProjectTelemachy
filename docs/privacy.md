@@ -14,15 +14,18 @@ update this table whenever the data flow changes — in particular, the planned
 NATS event subscriber under #92 may introduce new sinks; that PR must revise
 this table.
 
+Line numbers are indicative and may drift; the qualifying method name is
+the stable anchor.
+
 | Field                    | Sent to Agamemnon? | Logged by Telemachy? | Log level (where) |
 | ------------------------ | ------------------ | -------------------- | ----------------- |
-| `metadata.name`          | No                 | Yes                  | INFO (`executor.py:102`) |
+| `metadata.name`          | No                 | Yes                  | INFO (`WorkflowExecutor._run`, `executor.py:104`) |
 | `metadata.description`   | No                 | No                   | —                 |
-| `agents[].name`          | Yes (agent create) | Yes                  | DEBUG (`executor.py:195`) |
-| `agents[].model`         | Yes (agent create — as `programArgs`, see `agamemnon_client.py:148-149`) | No | — |
-| `teams[].name`           | Yes (team create)  | Yes                  | INFO (`executor.py:236`) |
-| `tasks[].subject`        | Yes (task create)  | Yes                  | INFO (`executor.py:304-305`); WARNING when a dependency fails (`executor.py:264-268`) |
-| `tasks[].description`    | Yes (task create — see `agamemnon_client.py:228-231`) | No | — |
+| `agents[].name`          | Yes (agent create) | Yes                  | DEBUG (`WorkflowExecutor._provision_one_agent`, `executor.py:195`) |
+| `agents[].model`         | Yes (agent create — as `programArgs`, see `AgamemnonClient._create_local_agent`, `agamemnon_client.py:148-149`) | No | — |
+| `teams[].name`           | Yes (team create)  | Yes                  | INFO (`WorkflowExecutor._create_team`, `executor.py:236`) |
+| `tasks[].subject`        | Yes (task create)  | Yes                  | INFO (`WorkflowExecutor._submit_tasks_with_deps`, `executor.py:308`); WARNING when a dependency fails (`executor.py:266`) |
+| `tasks[].description`    | Yes (task create — see `AgamemnonClient.create_task`, `agamemnon_client.py`) | No | — |
 
 ## Author guidance
 
