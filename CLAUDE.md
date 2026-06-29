@@ -192,13 +192,14 @@ just lint                          # ruff check
 just format                        # ruff format
 ```
 
-## Planned Features
+## Workflow State Persistence
 
-`status`, `list`, and `cancel` commands are not yet implemented. They
-require a persistent workflow-state backend (no design selected yet —
-not covered by #92, which scopes NATS event ingestion only). Until a
-state backend lands, query ProjectAgamemnon directly for live agent and
-team status.
+`status`, `list`, and `cancel` are backed by a file-based `WorkflowState`
+store (`src/telemachy/state_store.py`). `run` persists each workflow's
+state as JSON under `TELEMACHY_STATE_DIR` (default `~/.telemachy/state`);
+`status`/`list` read it back, and `cancel` writes a `<id>.cancel` sentinel
+that the executor's watcher polls. This is independent of the planned NATS
+event ingestion (#92), which scopes live task-lifecycle events only.
 
 ## Testing layers
 
@@ -234,6 +235,16 @@ path that covers permissions, runner labels, and secrets references.
 | `HEALTHCHECK_INTERVAL_SECONDS` | `15` | Seconds between Agamemnon liveness probes during `_monitor_completion`. |
 | `HEALTHCHECK_FAILURE_THRESHOLD` | `2` | Consecutive failed probes before raising `WorkflowConnectivityError`. |
 | `HEALTHCHECK_TIMEOUT_SECONDS` | `5` | Per-probe HTTP timeout (overrides client-wide 30s). |
+| `TELEMACHY_STATE_DIR` | `~/.telemachy/state` | Directory for persisted `WorkflowState` JSON files and `<id>.cancel` sentinels. Read by `status`, `list`, `cancel`. `STATE_DIR` is also accepted as an alias. |
+
+## Implementation Status
+
+### ✅ Implemented
+
+- File-backed `WorkflowState` persistence for `status`/`list`/`cancel`
+  commands (`src/telemachy/state_store.py`). Cancellation propagates via a
+  `<id>.cancel` sentinel polled by `cli.run` (1s interval); the executor's
+  existing `stop_event` is set when the sentinel appears.
 
 <!-- triage: 2026-04-24 myrmidon-swarm implementation pass complete -->
 <!-- 17 PRs merged, all remaining issues tracked individually -->
