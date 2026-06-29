@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import time
@@ -24,6 +25,10 @@ _DONE_STATUSES = {"completed", "failed", "error", "cancelled"}
 
 class WorkflowTimeoutError(Exception):
     """Raised when workflow monitoring exceeds the configured timeout or max poll count."""
+
+
+class WorkflowConnectivityError(Exception):
+    """Raised when Agamemnon fails consecutive heartbeat probes during monitoring."""
 
 
 class WorkflowExecutor:
@@ -409,9 +414,66 @@ class WorkflowExecutor:
         callback is scoped to this single monitoring session (#162) — invoking
         _monitor_completion again starts with a fresh set, so duplicate task
         subjects across separate runs each get their callbacks.
+
+        Runs a background heartbeat task to detect Agamemnon connectivity loss
+        mid-workflow. If connectivity is lost, raises WorkflowConnectivityError
+        which sets state.connectivity_failed for teardown.
         """
         logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
+        connectivity_lost = asyncio.Event()
+        heartbeat = asyncio.create_task(
+            self._heartbeat(state.spec.name, connectivity_lost),
+            name=f"telemachy-heartbeat-{state.workflow_id}",
+        )
+        try:
+            await self._poll_until_done(state, connectivity_lost)
+        finally:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
 
+    async def _heartbeat(self, workflow_name: str, connectivity_lost: asyncio.Event) -> None:
+        """Background task that probes Agamemnon liveness on a timer.
+
+        Calls ping() every healthcheck_interval_seconds and sets connectivity_lost
+        after healthcheck_failure_threshold consecutive failures.
+        """
+        interval = settings.healthcheck_interval_seconds
+        threshold = settings.healthcheck_failure_threshold
+        timeout = settings.healthcheck_timeout_seconds
+        consecutive_failures = 0
+        while not connectivity_lost.is_set():
+            await asyncio.sleep(interval)
+            ok = await self._client.ping(timeout=timeout)
+            if ok:
+                if consecutive_failures:
+                    logger.info(
+                        "Agamemnon connectivity restored for workflow '%s' after %d failure(s)",
+                        workflow_name,
+                        consecutive_failures,
+                    )
+                consecutive_failures = 0
+                continue
+            consecutive_failures += 1
+            logger.warning(
+                "Agamemnon health check failed (%d/%d) for workflow '%s'",
+                consecutive_failures,
+                threshold,
+                workflow_name,
+            )
+            if consecutive_failures >= threshold:
+                connectivity_lost.set()
+                return
+
+    async def _poll_until_done(
+        self, state: WorkflowState, connectivity_lost: asyncio.Event
+    ) -> None:
+        """Poll all team tasks until every task reaches a terminal status.
+
+        Checks the connectivity_lost event at the start of each iteration and
+        raises WorkflowConnectivityError if it is set, storing the failure flag
+        on state so _teardown can honour it under on_completion policy.
+        """
         poll_count = 0
         start_time = time.monotonic()
         timeout = settings.monitor_timeout_seconds
@@ -419,9 +481,16 @@ class WorkflowExecutor:
         emitted_done: set[str] = set()
 
         while True:
+            if connectivity_lost.is_set():
+                state.connectivity_failed = True
+                raise WorkflowConnectivityError(
+                    f"Agamemnon failed {settings.healthcheck_failure_threshold} "
+                    f"consecutive health checks for workflow '{state.spec.name}'"
+                )
             if self._stop_event and self._stop_event.is_set():
                 logger.warning(
-                    "Stop event set — aborting monitoring for workflow '%s'", state.spec.name
+                    "Stop event set — aborting monitoring for workflow '%s'",
+                    state.spec.name,
                 )
                 state.status = "cancelled"
                 return
@@ -480,8 +549,15 @@ class WorkflowExecutor:
 
         policy = state.spec.teardown
 
-        should_teardown = (policy == "on_completion" and state.status == "completed") or (
-            policy == "on_failure" and state.status == "failed"
+        # A connectivity-induced failure should still honour an `on_completion`
+        # policy — the workflow author asked us to clean up after this workflow,
+        # and "Agamemnon went away mid-run" should not leak agents and teams
+        # (see #161). We do NOT extend on_completion to *task* failures, which
+        # are the existing "leave for inspection" behaviour.
+        should_teardown = (
+            (policy == "on_completion" and state.status == "completed")
+            or (policy == "on_completion" and state.connectivity_failed)
+            or (policy == "on_failure" and state.status == "failed")
         )
 
         if not should_teardown:

@@ -48,6 +48,7 @@ def _make_mock_client() -> MagicMock:
     client.delete_agent = AsyncMock()
     client.list_agents = AsyncMock(return_value=[])
     client.list_teams = AsyncMock(return_value=[])
+    client.ping = AsyncMock(return_value=True)
     client.create_team = AsyncMock(return_value="team-id-001")
     client.create_task = AsyncMock(return_value="task-id-001")
     client.update_task = AsyncMock()

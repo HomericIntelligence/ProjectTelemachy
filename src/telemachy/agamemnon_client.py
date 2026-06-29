@@ -199,6 +199,28 @@ class AgamemnonClient:
         teams: list[dict[str, object]] = response.json().get("teams", [])
         return teams
 
+    async def ping(self, timeout: float = 5.0) -> bool:
+        """Single-shot liveness probe against ``GET /v1/agents``.
+
+        Returns ``True`` iff Agamemnon answers a 2xx response within *timeout*
+        seconds.
+
+        NOTE: This method intentionally bypasses ``_request_with_retry``.
+        The heartbeat loop in ``WorkflowExecutor`` is the retry/threshold
+        gate — wrapping ping() in 3 retries with exponential backoff would
+        swallow up to ~7s of connectivity loss per probe and defeat the
+        purpose of an out-of-band liveness signal. To tune resilience,
+        change ``HEALTHCHECK_FAILURE_THRESHOLD`` /
+        ``HEALTHCHECK_INTERVAL_SECONDS`` rather than this method.
+        """
+        try:
+            resp = await self._http.request("GET", "/v1/agents", timeout=timeout)
+        except httpx.HTTPError:
+            # ConnectError and TimeoutException are both httpx.HTTPError subclasses,
+            # so this single clause covers all transport-level failures.
+            return False
+        return 200 <= resp.status_code < 300
+
     # === Team endpoints ===
 
     async def create_team(self, name: str, agent_ids: list[str]) -> str:

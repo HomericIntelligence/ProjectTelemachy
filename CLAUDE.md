@@ -228,6 +228,9 @@ path that covers permissions, runner labels, and secrets references.
 | `MONITOR_TIMEOUT_SECONDS` | `3600` | Seconds before workflow monitor times out |
 | `MONITOR_MAX_POLLS` | `7200` | Maximum polling attempts for workflow monitor |
 | `DEFAULT_WORKFLOW_TIMEOUT` | `7200` | Per-workflow execution timeout in seconds |
+| `HEALTHCHECK_INTERVAL_SECONDS` | `15` | Seconds between Agamemnon liveness probes during `_monitor_completion`. |
+| `HEALTHCHECK_FAILURE_THRESHOLD` | `2` | Consecutive failed probes before raising `WorkflowConnectivityError`. |
+| `HEALTHCHECK_TIMEOUT_SECONDS` | `5` | Per-probe HTTP timeout (overrides client-wide 30s). |
 
 <!-- triage: 2026-04-24 myrmidon-swarm implementation pass complete -->
 <!-- 17 PRs merged, all remaining issues tracked individually -->
