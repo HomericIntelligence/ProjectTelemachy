@@ -397,6 +397,86 @@ class TestErrorPaths:
         deleted_ids = [call.args[0] for call in client.delete_agent.call_args_list]
         assert "agent-id-first" in deleted_ids
 
+    @pytest.mark.asyncio
+    async def test_wake_agent_failure_still_records_created_agent_for_teardown(self) -> None:
+        """If create_agent succeeds but wake_agent raises, the created agent
+        must still appear in state.created_agents so teardown can delete it (#164).
+
+        Single-agent case — no concurrency, ordering is trivial.
+        """
+        client = _make_mock_client()
+        client.create_agent = AsyncMock(return_value="agent-created-but-not-woken")
+        client.wake_agent = AsyncMock(side_effect=AgamemnonError(503, "service unavailable"))
+
+        spec = _make_spec(
+            agents=[{"name": "worker", "runtime": "local"}],
+            teardown="on_failure",
+        )
+
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        state = await executor.execute(spec)
+
+        assert state.status == "failed"
+        assert state.created_agents.get("worker") == "agent-created-but-not-woken"
+        deleted_ids = [call.args[0] for call in client.delete_agent.call_args_list]
+        assert "agent-created-but-not-woken" in deleted_ids
+
+    @pytest.mark.asyncio
+    async def test_partial_provisioning_tracks_all_completed_creates_before_failure(
+        self,
+    ) -> None:
+        """When create_agent fan-out has mixed outcomes, every agent whose
+        create_agent returned an id must be present in state.created_agents,
+        regardless of gather() completion ordering (#164).
+
+        Determinism: max_concurrent_provisioning=1 forces the _bounded() coroutines
+        to serialize through self._provision_semaphore. Calls to client.create_agent
+        therefore arrive in agent-list order, so AsyncMock.side_effect entries map
+        1:1 to agents A/B/C and the test does not depend on asyncio.gather
+        scheduling behaviour.
+        """
+        client = _make_mock_client()
+        client.create_agent = AsyncMock(
+            side_effect=[
+                "id-A",
+                AgamemnonError(500, "boom"),
+                "id-C",
+            ]
+        )
+
+        spec = _make_spec(
+            agents=[
+                {"name": "agent-A", "runtime": "local"},
+                {"name": "agent-B", "runtime": "local"},
+                {"name": "agent-C", "runtime": "local"},
+            ],
+            tasks=[
+                {"subject": "T", "description": "...", "assign_to": "agent-A"},
+            ],
+            teardown="on_failure",
+        )
+
+        # max_concurrent_provisioning=1 → strictly sequential create_agent calls.
+        executor = WorkflowExecutor(client, poll_interval=0.01, max_concurrent_provisioning=1)
+        state = await executor.execute(spec)
+
+        assert state.status == "failed"
+        # Every agent whose create_agent returned an id must be tracked,
+        # even though one sibling raised mid-fan-out.
+        assert state.created_agents.get("agent-A") == "id-A"
+        assert state.created_agents.get("agent-C") == "id-C"
+        assert "agent-B" not in state.created_agents
+        # Both successfully-created agents must be torn down (delete_agent
+        # ordering is not asserted — teardown iterates state.created_agents).
+        deleted_ids = [call.args[0] for call in client.delete_agent.call_args_list]
+        assert "id-A" in deleted_ids
+        assert "id-C" in deleted_ids
+        # wake_agent was called for both successful creates (default AsyncMock
+        # succeeds), but not for the failing one.
+        woken_ids = [call.args[0] for call in client.wake_agent.call_args_list]
+        assert "id-A" in woken_ids
+        assert "id-C" in woken_ids
+
 
 # ---------------------------------------------------------------------------
 # Tests: hooks (#144)

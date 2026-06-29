@@ -140,6 +140,22 @@ class WorkflowSpec(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def validate_unique_agent_names(self) -> WorkflowSpec:
+        """Reject workflows with duplicate agent names.
+
+        The executor identifies agents by name in state.created_agents (#164);
+        duplicate names would silently overwrite each other and orphan agents.
+        """
+        names = [a.name for a in self.agents]
+        duplicates = sorted({n for n in names if names.count(n) > 1})
+        if duplicates:
+            raise ValueError(
+                f"Duplicate agent names not allowed: {duplicates}. "
+                "Each agent must have a unique name."
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_references(self) -> WorkflowSpec:
         agent_names = {a.name for a in self.agents}
 

@@ -132,9 +132,10 @@ class WorkflowExecutor:
                     if t.get("name") and t.get("id")
                 }
 
-            # Provision all agents concurrently (partial results saved into state
-            # so teardown can clean up even if provisioning partially fails)
-            state.created_agents = await self._provision_agents(spec.agents, spec.name, state)
+            # Provision all agents concurrently. _provision_agents aliases its
+            # internal id_map to state.created_agents up front so teardown sees
+            # every successfully-created agent even on partial failure (#164).
+            await self._provision_agents(spec.agents, spec.name, state)
 
             # Create teams and submit tasks (respecting dependencies)
             state.created_teams = await self._create_teams(
@@ -185,50 +186,68 @@ class WorkflowExecutor:
     ) -> dict[str, str]:
         """Create all agents concurrently. Returns {agent_name: agamemnon_id}.
 
-        If any agent fails to provision, partial results are saved to *state* so
-        that teardown can clean up already-created agents before re-raising.
+        The returned dict is also aliased to state.created_agents up front and
+        mutated incrementally: each per-agent coroutine records its id the moment
+        create_agent returns, BEFORE wake_agent runs, so teardown sees every
+        created agent even if wake_agent or a sibling coroutine fails (#164).
         """
         logger.info("Provisioning %d agent(s)...", len(agents))
 
+        # Shared id map — mutated by _provision_one_agent the instant each
+        # create_agent call returns. Aliased to state.created_agents so teardown
+        # sees newly-created agents even if the workflow raises mid-fan-out (#164).
+        id_map: dict[str, str] = {}
+        state.created_agents = id_map
+
         async def _bounded(agent: AgentSpec) -> tuple[str, str]:
             async with self._provision_semaphore:
-                return await self._provision_one_agent(agent, workflow_name)
+                return await self._provision_one_agent(agent, workflow_name, id_map)
 
         coros = [_bounded(agent) for agent in agents]
         raw_results: list[tuple[str, str] | BaseException] = await asyncio.gather(
             *coros, return_exceptions=True
         )
-        id_map: dict[str, str] = {}
-        first_exc: BaseException | None = None
-        for item in raw_results:
-            if isinstance(item, BaseException):
-                if first_exc is None:
-                    first_exc = item
-            else:
-                name, agent_id = item
-                id_map[name] = agent_id
-        # Persist partial results so teardown can clean them up
-        state.created_agents = id_map
+        first_exc: BaseException | None = next(
+            (r for r in raw_results if isinstance(r, BaseException)), None
+        )
         if first_exc is not None:
             raise first_exc
         logger.info("All agents provisioned: %s", id_map)
         return id_map
 
-    async def _provision_one_agent(self, spec: AgentSpec, workflow_name: str) -> tuple[str, str]:
+    async def _provision_one_agent(
+        self,
+        spec: AgentSpec,
+        workflow_name: str,
+        id_map: dict[str, str],
+    ) -> tuple[str, str]:
         """Create a single agent and wake it. Returns (name, agamemnon_id).
 
         If an agent with this workflow's idempotency key already exists, reuse it.
+
+        Mutates *id_map* as a side effect: the Agamemnon id is recorded the
+        moment create_agent (or reuse) resolves — BEFORE wake_agent is awaited —
+        so a wake failure does not leave an orphan agent untracked by teardown
+        (#164). This is safe under asyncio's cooperative single-threaded
+        scheduling: the assignment is between two await points and cannot
+        interleave with other coroutines. Agent-name collisions are
+        prevented by WorkflowSpec.validate_unique_agent_names.
         """
         from telemachy.idempotency import make_key
 
+
         if self._dry_run:
             dry_id = f"dry-run-agent-{spec.name}"
+            id_map[spec.name] = dry_id
             logger.info("[dry-run] Would create agent '%s' → id=%s", spec.name, dry_id)
             return spec.name, dry_id
 
         key = make_key(workflow_name, spec.name)
         existing_id = self._existing_agents_by_key.get(key)
         if existing_id and not self._force:
+            # Record the reused id BEFORE waking it, so a wake failure does not
+            # leave the (reused) agent untracked by teardown (#164).
+            id_map[spec.name] = existing_id
             logger.info(
                 "Reusing existing agent '%s' (id=%s, key=%s)",
                 spec.name,
@@ -255,6 +274,8 @@ class WorkflowExecutor:
             return spec.name, existing_id
 
         agent_id = await self._client.create_agent(spec, idempotency_name=key)
+        # Record the id BEFORE any further awaitable that could fail (#164).
+        id_map[spec.name] = agent_id
         logger.debug("Created agent '%s' → id=%s (key=%s)", spec.name, agent_id, key)
         await self._client.wake_agent(agent_id)
         logger.debug("Woke agent '%s' (id=%s)", spec.name, agent_id)
