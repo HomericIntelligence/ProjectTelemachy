@@ -4,18 +4,26 @@ Addresses #149: replaces hardcoded YAML strings in test_models.py and
 test_cli.py with a single set of typed factory functions. Each test calls
 the factory with only the fields it cares about; defaults come from one
 place so a schema change in src/telemachy/models.py only edits this file.
+
+Also hosts the in-process Agamemnon stub fixtures used by the workflow
+lifecycle integration tests (#146).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
+import pytest_asyncio
 import yaml
 
+from telemachy.agamemnon_client import AgamemnonClient
 from telemachy.models import WorkflowSpec
+from tests.stub_agamemnon import StubAgamemnon
 
 # --- dict-level builders (single source of truth) --------------------------
 
@@ -159,3 +167,128 @@ def workflow_file_factory(tmp_path: Path) -> Callable[..., Path]:
         return p
 
     return _make
+
+
+# --- Agamemnon stub fixtures (integration / lifecycle tests, #146) ---------
+
+
+def make_client_for(stub: StubAgamemnon) -> AgamemnonClient:
+    """Sync builder: return an AgamemnonClient whose transport is *stub*'s ASGI app.
+
+    NOT a fixture — call this from any test that needs a stub other than the
+    default `stub_agamemnon`. The caller MUST register the client with the
+    `client_pool` fixture so it is closed even if the test raises.
+    """
+    client = AgamemnonClient(url="http://stub", api_key="test-key", require_tls=False)
+    client._client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=stub.asgi),
+        base_url="http://stub",
+        headers={"Content-Type": "application/json", "Authorization": "Bearer test-key"},
+        timeout=5.0,
+    )
+    return client
+
+
+@dataclass
+class ClientPool:
+    """Tracks every AgamemnonClient a test constructed so the fixture can close them."""
+
+    _clients: list[AgamemnonClient] = field(default_factory=list)
+
+    def register(self, client: AgamemnonClient) -> AgamemnonClient:
+        self._clients.append(client)
+        return client
+
+
+@pytest_asyncio.fixture
+async def client_pool() -> AsyncIterator[ClientPool]:
+    """Async fixture that closes every registered client in its finally block.
+
+    This is the ONLY lifetime-managing client fixture. It runs even when the
+    test body raises, so transport sockets are always released.
+    """
+    pool = ClientPool()
+    try:
+        yield pool
+    finally:
+        for c in pool._clients:
+            if c._client is not None:
+                try:
+                    await c._client.aclose()
+                except Exception:
+                    pass  # close is best-effort during teardown
+                finally:
+                    c._client = None
+
+
+@pytest.fixture
+def stub_agamemnon_factory() -> Callable[..., StubAgamemnon]:
+    """Build a fresh StubAgamemnon, optionally preloaded with task→status sequences."""
+
+    def _factory(task_statuses: dict[str, list[str]] | None = None) -> StubAgamemnon:
+        return StubAgamemnon(task_statuses=task_statuses)
+
+    return _factory
+
+
+@pytest.fixture
+def stub_agamemnon(stub_agamemnon_factory: Callable[..., StubAgamemnon]) -> StubAgamemnon:
+    return stub_agamemnon_factory()
+
+
+@pytest.fixture
+def agamemnon_client(
+    stub_agamemnon: StubAgamemnon, client_pool: ClientPool
+) -> AgamemnonClient:
+    """Default client bound to the default `stub_agamemnon` instance."""
+    return client_pool.register(make_client_for(stub_agamemnon))
+
+
+@pytest.fixture
+def make_spec() -> Callable[..., WorkflowSpec]:
+    """Factory producing WorkflowSpec instances parameterised by agents/tasks/teardown."""
+
+    def _factory(
+        agents: list[dict[str, Any]] | None = None,
+        tasks: list[dict[str, Any]] | None = None,
+        teardown: str = "on_completion",
+        timeout_seconds: float | None = None,
+    ) -> WorkflowSpec:
+        agents = agents or [{"name": "worker", "runtime": "local"}]
+        tasks = tasks or [{"subject": "Task 1", "description": "Do work", "assign_to": "worker"}]
+        raw: dict[str, Any] = {
+            "apiVersion": "telemachy/v1",
+            "metadata": {"name": "lifecycle-test", "description": "integration"},
+            "agents": agents,
+            "teams": [
+                {"name": "team-a", "agents": [a["name"] for a in agents], "tasks": tasks}
+            ],
+            "teardown": teardown,
+        }
+        if timeout_seconds is not None:
+            raw["timeout_seconds"] = timeout_seconds
+        return WorkflowSpec.model_validate(raw)
+
+    return _factory
+
+
+@pytest.fixture
+def write_workflow_yaml(
+    tmp_path: Path, make_spec: Callable[..., WorkflowSpec]
+) -> Callable[..., Path]:
+    """Persist a WorkflowSpec to a tmp YAML file and return its path."""
+
+    def _writer(**kwargs: Any) -> Path:
+        spec = make_spec(**kwargs)
+        path = tmp_path / "workflow.yaml"
+        path.write_text(yaml.safe_dump(spec.model_dump(mode="json"), sort_keys=False))
+        return path
+
+    return _writer
+
+
+def load_workflow(path: Path) -> WorkflowSpec:
+    """Single import point for the CLI's private _load_workflow."""
+    from telemachy.cli import _load_workflow
+
+    return _load_workflow(path)
