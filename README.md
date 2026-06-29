@@ -121,6 +121,13 @@ in. Use `--force` to force creation of fresh resources and avoid this inconsiste
 just run workflows/example.yaml -- --force
 ```
 
+## Privacy & PII
+
+Task `subject` and `description` are forwarded to ProjectAgamemnon, and
+`subject` appears in Telemachy logs at INFO. See
+[`docs/privacy.md`](docs/privacy.md) before putting personal data into a
+workflow YAML.
+
 ## Development
 
 ```bash

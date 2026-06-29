@@ -176,6 +176,9 @@ memory.
 - **Workflow YAML is a public API** — any change to required fields,
   default values, or schema constraints requires a `MINOR` (additive) or
   `MAJOR` (breaking) version bump per `docs/backwards-compat.md`.
+- **Never paste PII (names, emails, account IDs, secrets) into workflow
+  `subject` or `description` fields.** `subject` is logged by Telemachy at
+  INFO and both are transmitted to Agamemnon. See `docs/privacy.md`.
 
 If a task appears to require violating one of the rules above, stop and
 open an issue describing the conflict before proceeding.

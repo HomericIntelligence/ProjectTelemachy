@@ -1,3 +1,7 @@
+# NOTE: `subject` and `description` are forwarded to Agamemnon; `subject` is
+# logged by Telemachy at INFO. Do not include PII or secrets in these fields.
+# See docs/privacy.md.
+
 apiVersion: telemachy/v1
 metadata:
   name: hello-world-e2e
