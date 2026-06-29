@@ -30,7 +30,8 @@ schema:
 
 # === Development ===
 
-# Run the test suite
+# Run the full test suite (unit + integration). Lifecycle tests run by default
+# to satisfy issue #146; use `just test-unit` to skip them during fast iteration.
 test:
     pixi run pytest
 

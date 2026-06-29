@@ -145,7 +145,7 @@ tested (`tests/test_roadmap.py`).
 - Use `httpx.AsyncClient` for all HTTP calls; never `requests`.
 - Pydantic v2 models for all structured data.
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
-- Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
+- Tests are split into **unit** tests (mock `AgamemnonClient`) and **integration** tests (drive a real `httpx.AsyncClient` through `tests/stub_agamemnon.py`, an in-process ASGI stub). Mark new lifecycle/end-to-end tests with `@pytest.mark.integration`. `just test` runs the full suite (unit + integration); `just test-unit` skips integration for fast iteration; `just test-integration` runs only the lifecycle suite. The stub returns HTTP 501 (not 404) for any endpoint it does not implement so that a new Agamemnon endpoint surfaces as a named test failure. Integration tests construct stub-bound clients through `make_client_for(stub)` and register them with the `client_pool` fixture — never inline `httpx.AsyncClient(...)` in a test.
 - CI enforces a `--cov-fail-under=75` coverage floor (sourced from `pyproject.toml` `[tool.coverage.report]`). Local `just test` does not pass `--cov` by default — reproduce the CI check with `pixi run pytest --cov=telemachy --cov-report=term-missing`.
 - All `src/` Python must pass `pixi run python -m bandit -ll --ini .bandit`. Suppress
   findings inline with `# nosec <ID>  # <one-line rationale>`, not by widening
