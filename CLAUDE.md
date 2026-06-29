@@ -207,6 +207,13 @@ team status.
 
 Integration tests must declare `pytestmark = [pytest.mark.integration, pytest.mark.asyncio]` at the top of each module.
 
+## CI Triage
+
+See `docs/ci-triage.md` when a CI job fails at "Set up job" or any
+pre-`checkout` step. These are almost always GitHub-managed runner
+infrastructure issues, not code defects, and have a documented triage
+path that covers permissions, runner labels, and secrets references.
+
 ## Environment Variables
 
 | Variable | Default | Description |
