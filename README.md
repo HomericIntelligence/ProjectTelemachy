@@ -35,6 +35,13 @@ just validate workflows/example.yaml
 > the current release. Until a state backend lands, query
 > ProjectAgamemnon directly for live agent and team status.
 
+## Roadmap
+
+See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the canonical roadmap —
+current, next, and future releases plus known limitations. Outstanding
+work (NATS subscriber, state backend for `status`/`list`/`cancel`) is
+tracked under epic [#92](https://github.com/HomericIntelligence/ProjectTelemachy/issues/92).
+
 ## Workflow Schema
 
 A workflow YAML has four top-level sections:

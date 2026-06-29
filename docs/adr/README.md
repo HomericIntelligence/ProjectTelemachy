@@ -18,6 +18,7 @@ significant architectural choice was made.
 | --- | --- | --- |
 | 001 | Monitoring via HTTP polling instead of NATS events | Proposed |
 | 002 | Decouple from ai-maestro (use Agamemnon exclusively) | Accepted |
+| 003 | `docs/ROADMAP.md` as the canonical planning artefact | Accepted |
 
 ## See also
 

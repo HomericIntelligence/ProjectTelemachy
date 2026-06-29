@@ -57,6 +57,8 @@ replace the HTTP polling loop in `_monitor_completion`. Not yet implemented._
 - `telemachy/executor.py` — Orchestrates the full workflow lifecycle: provision → assign tasks → monitor → teardown
 - `telemachy/cli.py` — Typer CLI (`run`, `plan`, `status`, `validate`, `list`, `cancel`)
 - `telemachy/config.py` — Settings loaded from environment / `.env`
+- `docs/ROADMAP.md` — canonical roadmap for outstanding work (NATS
+  subscriber under #92, state backend under v1.0.0). See ADR-003.
 
 ## Workflow Schema
 
@@ -121,6 +123,19 @@ ProjectTelemachy/
 ├── justfile
 └── pixi.toml
 ```
+
+## Planned Features
+
+Outstanding work is tracked in [`docs/ROADMAP.md`](docs/ROADMAP.md):
+
+- **NATS subscriber** (#92) — event-driven task-completion monitoring,
+  superseding HTTP polling.
+- **Persistent state backend** — enables the `status`, `list`, and `cancel`
+  CLI commands.
+
+For the full planning picture — including release-line bucketing and
+known limitations — see `docs/ROADMAP.md`. Roadmap drift is regression-
+tested (`tests/test_roadmap.py`).
 
 ## Development Guidelines
 
