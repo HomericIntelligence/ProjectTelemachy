@@ -2,54 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from telemachy.cli import app
+from tests.conftest import make_workflow_dict
 
 runner = CliRunner()
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-_VALID_WORKFLOW_YAML = """\
-apiVersion: telemachy/v1
-metadata:
-  name: test-workflow
-  description: A minimal test workflow
-agents:
-  - name: worker
-    runtime: local
-teams:
-  - name: team-a
-    agents: [worker]
-    tasks:
-      - subject: Task 1
-        description: Do some work
-        assign_to: worker
-teardown: on_completion
-"""
-
-_INVALID_WORKFLOW_YAML_MISSING_NAME = """\
-apiVersion: telemachy/v1
-metadata:
-  description: Missing the name field
-agents:
-  - name: worker
-    runtime: local
-teams:
-  - name: team-a
-    agents: [worker]
-    tasks:
-      - subject: Task 1
-        description: Do some work
-        assign_to: worker
-teardown: on_completion
-"""
 
 
 # ---------------------------------------------------------------------------
@@ -58,18 +22,24 @@ teardown: on_completion
 
 
 @pytest.fixture()
-def valid_workflow_file(tmp_path: Path) -> Path:
-    """Write a minimal valid workflow YAML to a tmp file."""
-    p = tmp_path / "workflow.yaml"
-    p.write_text(_VALID_WORKFLOW_YAML)
-    return p
+def valid_workflow_file(
+    workflow_file_factory: Callable[..., Path],
+) -> Path:
+    """Write a minimal valid workflow YAML to a tmp file via the shared factory."""
+    return workflow_file_factory()
 
 
 @pytest.fixture()
 def invalid_workflow_file(tmp_path: Path) -> Path:
-    """Write a workflow YAML missing metadata.name to a tmp file."""
+    """Write a workflow YAML missing metadata.name to a tmp file.
+
+    Builds the canonical workflow via the factory, then deletes the name key
+    so the only diff from valid_workflow_file is the missing field under test.
+    """
+    raw = make_workflow_dict()
+    del raw["metadata"]["name"]
     p = tmp_path / "invalid_workflow.yaml"
-    p.write_text(_INVALID_WORKFLOW_YAML_MISSING_NAME)
+    p.write_text(yaml.safe_dump(raw, sort_keys=False))
     return p
 
 
