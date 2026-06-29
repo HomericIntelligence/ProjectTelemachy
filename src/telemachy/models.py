@@ -180,3 +180,4 @@ class WorkflowState(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     error: str | None = None
+    connectivity_failed: bool = False
