@@ -1,0 +1,3 @@
+[bandit]
+targets = src/telemachy
+recursive = true

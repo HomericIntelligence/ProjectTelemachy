@@ -22,6 +22,7 @@ run             = "bash -c 'just run \"$@\"' --"
 test            = "just test"
 lint            = "just lint"
 format          = "just format"
+bandit          = "bandit -ll --ini .bandit -r src/telemachy"
 license-audit   = "python -c \"import tomllib, pathlib; data = tomllib.loads(pathlib.Path('pixi.toml').read_text()); deps = data.get('pypi-dependencies', {}); print('Runtime [pypi-dependencies] (cross-check against docs/license-audit.md):'); [print(f'  {k} = {v!r}') for k, v in deps.items() if k != 'telemachy']\""
 
 [feature.dev.pypi-dependencies]
@@ -33,6 +34,7 @@ mypy            = ">=1.10"
 types-PyYAML    = ">=6.0"
 yamllint        = ">=1.26"
 respx           = ">=0.21"
+bandit          = ">=1.7.5"
 
 [environments]
 default = { features = ["dev"], solve-group = "default" }

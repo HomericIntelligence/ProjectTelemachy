@@ -38,6 +38,16 @@ repos:
         entry: '^\s*continue-on-error:\s*true\s*$'
         files: ^\.github/workflows/.*\.ya?ml$
         pass_filenames: true
+      - id: bandit
+        name: "bandit (SAST, medium+ severity)"
+        description: >
+          AST-based Python security scan. Configured via .bandit INI;
+          findings at severity MEDIUM or higher fail the commit. Add
+          `# nosec <ID>  # <rationale>` inline to suppress per-site.
+        language: system
+        entry: pixi run python -m bandit -ll --ini .bandit
+        files: ^src/telemachy/.*\.py$
+        pass_filenames: false
       - id: require-signed-commits
         name: "require gpg/ssh-signed commits on push"
         description: >

@@ -15,7 +15,7 @@ class AgentSpec(BaseModel):
     name: str
     program: str = "claude-code"
     model: str | None = None
-    working_dir: str = "/tmp"
+    working_dir: str = "/tmp"  # nosec B108 — ephemeral agent working directory
     runtime: Literal["local", "docker"] = "local"
     docker_image: str | None = None
     cpus: int = 2

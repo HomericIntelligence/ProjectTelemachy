@@ -147,6 +147,11 @@ tested (`tests/test_roadmap.py`).
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
 - Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
 - CI enforces a `--cov-fail-under=75` coverage floor (sourced from `pyproject.toml` `[tool.coverage.report]`). Local `just test` does not pass `--cov` by default — reproduce the CI check with `pixi run pytest --cov=telemachy --cov-report=term-missing`.
+- All `src/` Python must pass `pixi run python -m bandit -ll --ini .bandit`. Suppress
+  findings inline with `# nosec <ID>  # <one-line rationale>`, not by widening
+  the `.bandit` `skips` list. When adding a new package under `src/<name>/`,
+  also update the `files:` regex in `.pre-commit-config.yaml` and the `-r`
+  target in the `bandit` task in `pixi.toml`.
 
 ## Agent Guardrails
 
@@ -190,6 +195,8 @@ just validate workflows/example.yaml  # validate YAML schema only
 just test                          # run pytest
 just lint                          # ruff check
 just format                        # ruff format
+just bandit                        # SAST scan (medium+ severity) on src/telemachy
+just check                         # lint + mypy + bandit + test
 ```
 
 ## Workflow State Persistence
