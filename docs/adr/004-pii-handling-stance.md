@@ -1,4 +1,4 @@
-# ADR-003: PII handling stance for workflow text
+# ADR-004: PII handling stance for workflow text
 
 - **Status:** Accepted
 - **Date:** 2026-06-03
