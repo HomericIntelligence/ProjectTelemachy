@@ -207,6 +207,24 @@ gh pr create --title "[Type] Brief description" --body "Closes #<issue-number>"
 - PR title should be clear and descriptive
 - Tests and linting must pass
 
+### Changelog discipline
+
+Any PR that changes user-visible behavior — CLI flags, workflow YAML
+schema, env vars, public Python imports under `telemachy.*`, or runtime
+defaults — must add a bullet to the appropriate section of
+`CHANGELOG.md`'s `## [Unreleased]` block in the same PR. Group the entry
+under `Added` / `Changed (breaking)` / `Changed` / `Fixed` / `Security` /
+`Removed`, and reference the issue or PR number in parentheses.
+
+Pure-internal changes (refactors with no API change, test-only changes,
+CI workflow edits that don't change contributor commands, Dependabot
+bumps for dev-only deps) do not require a CHANGELOG entry. When in
+doubt, add one — entries are cheap; missed breaking changes are not.
+
+The PR template's "Test plan" checklist includes a CHANGELOG line that
+must be ticked (or explicitly waived in the PR description as
+internal-only) before merge.
+
 ### Never Push Directly to Main
 
 The `main` branch is protected. All changes must go through pull requests.
