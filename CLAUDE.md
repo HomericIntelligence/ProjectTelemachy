@@ -145,10 +145,7 @@ tested (`tests/test_roadmap.py`).
 - Pydantic v2 models for all structured data.
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
 - Tests use `pytest-asyncio` and mock the `AgamemnonClient` at the boundary.
-- CI enforces a minimum coverage of **75%** via `--cov-fail-under=75` on
-  the `Test (pytest)` step in `.github/workflows/ci.yml`. Measured
-  baseline at the time of the gate's introduction was 78%. Raise the
-  floor in a follow-up PR once coverage rises and stabilises.
+- CI enforces a `--cov-fail-under=75` coverage floor (sourced from `pyproject.toml` `[tool.coverage.report]`). Local `just test` does not pass `--cov` by default — reproduce the CI check with `pixi run pytest --cov=telemachy --cov-report=term-missing`.
 
 ## Agent Guardrails
 
