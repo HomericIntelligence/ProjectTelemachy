@@ -34,6 +34,14 @@ schema:
 test:
     pixi run pytest
 
+# Run only unit tests (everything outside tests/integration/)
+test-unit:
+    pixi run pytest -m "not integration" tests
+
+# Run only integration tests (mock-Agamemnon HTTP layer)
+test-integration:
+    pixi run pytest -m integration tests/integration
+
 # Run ruff linter
 lint:
     pixi run ruff check src tests

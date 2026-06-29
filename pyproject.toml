@@ -13,6 +13,9 @@ packages = ["src/telemachy"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+markers = [
+    "integration: end-to-end tests exercising WorkflowExecutor against a mock Agamemnon HTTP server (respx)",
+]
 
 [tool.ruff]
 line-length = 100
