@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 import yaml
 
-from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec
+from telemachy.models import AgentSpec, TaskSpec, TeamSpec, WorkflowSpec, WorkflowState
 from tests.conftest import make_agent_dict, make_two_task_dep_dict
 
 
@@ -180,3 +180,14 @@ teardown: never
         data = yaml.safe_load(yaml_text)
         with pytest.raises(ValueError, match="Duplicate agent names"):
             WorkflowSpec.model_validate(data)
+
+
+class TestWorkflowState:
+    def test_workflow_state_submitted_subjects_defaults_empty(self) -> None:
+        from tests.conftest import make_workflow_dict
+
+        spec = WorkflowSpec.model_validate(make_workflow_dict())
+        state = WorkflowState(workflow_id="abc", spec=spec, status="pending")
+        assert state.submitted_task_subjects == set()
+        state.submitted_task_subjects.add("Task 1")
+        assert "Task 1" in state.submitted_task_subjects

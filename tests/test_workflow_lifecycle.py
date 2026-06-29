@@ -91,8 +91,18 @@ async def test_failed_dependency_skips_downstream(
     client_pool: ClientPool,
     make_spec: Callable[..., WorkflowSpec],
 ) -> None:
-    """If A fails, B is never POSTed and the workflow ends in failed state."""
-    stub = stub_agamemnon_factory(task_statuses={"A": ["pending", "failed"]})
+    """If A fails (terminal event reports 'failed'), B is never POSTed and the
+    workflow ends in failed state.
+
+    Event-driven (#3): A's terminal status arrives via the NATS monitor, not via
+    HTTP status polling, so we drive A='failed' through an explicit monitor mock
+    that overrides conftest's all-completed auto-mock.
+    """
+    from unittest.mock import patch
+
+    from tests.conftest import _create_mock_nats_monitor
+
+    stub = stub_agamemnon_factory(task_statuses={"A": ["failed"]})
     client = client_pool.register(make_client_for(stub))
 
     spec = make_spec(
@@ -102,8 +112,14 @@ async def test_failed_dependency_skips_downstream(
         ],
         teardown="on_failure",
     )
-    executor = WorkflowExecutor(client, poll_interval=0.01)
-    state = await executor.execute(spec)
+
+    monitor = _create_mock_nats_monitor()
+    # A is terminal-failed from the start; B must never become known/submitted.
+    monitor.record_status("A", "failed")
+
+    with patch("telemachy.executor.NatsMonitor", return_value=monitor):
+        executor = WorkflowExecutor(client, poll_interval=0.01)
+        state = await executor.execute(spec)
 
     assert state.status == "failed"
     subjects = {t.subject for team in stub.tasks.values() for t in team.values()}

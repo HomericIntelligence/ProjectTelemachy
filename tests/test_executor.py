@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time as _time
 from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,6 +12,7 @@ import pytest
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
 from telemachy.executor import WorkflowExecutor, WorkflowTimeoutError
 from telemachy.models import AgentSpec, TaskSpec, WorkflowSpec
+from telemachy.nats_monitor import NatsMonitor
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -56,6 +58,38 @@ def _make_mock_client() -> MagicMock:
     client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "completed"}])
     client.delete_team = AsyncMock()
     return client
+
+
+def _make_mock_monitor() -> AsyncMock:
+    """Build a NatsMonitor mock wired for use as an async context manager.
+
+    ``async with NatsMonitor(...) as monitor`` binds ``monitor`` to the
+    ``__aenter__`` return value, so that must be the mock itself. The
+    synchronous query methods (``latest_status``/``terminal_event``/
+    ``record_status``/``notify_submitted``) are plain ``MagicMock``s so
+    they return values rather than coroutines.
+    """
+    monitor = AsyncMock(spec=NatsMonitor)
+    monitor.__aenter__.return_value = monitor
+    monitor.__aexit__.return_value = None
+    monitor.connected = True
+    monitor.latest_status = MagicMock(return_value="completed")
+    monitor.record_status = MagicMock()
+    monitor.notify_submitted = MagicMock()
+
+    def _default_event(_subject: str) -> asyncio.Event:
+        ev = asyncio.Event()
+        ev.set()
+        return ev
+
+    monitor.terminal_event = MagicMock(side_effect=_default_event)
+    monitor.submitted_event = asyncio.Event()
+    return monitor
+
+
+# NOTE: NatsMonitor is auto-mocked for tests outside TestNatsMonitoring by the
+# autouse fixture in tests/conftest.py; no per-module patcher is needed here.
+# TestNatsMonitoring tests build their own monitor via _make_mock_monitor().
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +187,9 @@ class TestTaskCreation:
         assert client.create_task.call_count == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(
+        reason="Replaced by event-driven test: test_dep_unblock_waits_on_terminal_event_not_sleep"
+    )
     async def test_dependent_task_submitted_after_predecessor(self) -> None:
         """Task with blocked_by must not be submitted before its dependency completes."""
         call_order: list[str] = []
@@ -273,6 +310,9 @@ class TestTeardown:
 
 class TestErrorPaths:
     @pytest.mark.asyncio
+    @pytest.mark.skip(
+        reason="Replaced by event-driven test: test_wait_for_all_terminal_skips_unsubmitted_tasks"
+    )
     async def test_failed_dependency_skips_downstream_task(self) -> None:
         """When task A fails, task B (blocked_by A) must never be submitted."""
         # get_tasks returns A as "failed" after it is submitted, then stays failed
@@ -320,26 +360,6 @@ class TestErrorPaths:
         assert "Task A" in submitted_subjects
 
     @pytest.mark.asyncio
-    async def test_monitor_timeout_sets_failed_state(self) -> None:
-        """When _monitor_completion raises asyncio.TimeoutError, workflow fails gracefully."""
-        client = _make_mock_client()
-        spec = _make_spec(teardown="never")
-
-        executor = WorkflowExecutor(client, poll_interval=0.01)
-
-        with patch.object(
-            executor,
-            "_monitor_completion",
-            new_callable=AsyncMock,
-            side_effect=TimeoutError("monitor timed out"),
-        ):
-            state = await executor.execute(spec)
-
-        assert state.status == "failed"
-        assert state.error is not None
-        assert "timed out" in state.error
-
-    @pytest.mark.asyncio
     async def test_teardown_runs_even_when_execution_fails(self) -> None:
         """Teardown (delete_agent) must run even when the workflow raises mid-execution."""
         client = _make_mock_client()
@@ -351,7 +371,7 @@ class TestErrorPaths:
         # Simulate an unexpected error during team/task creation phase
         with patch.object(
             executor,
-            "_create_teams",
+            "_create_teams_only",
             new_callable=AsyncMock,
             side_effect=RuntimeError("unexpected mid-execution error"),
         ):
@@ -561,41 +581,28 @@ class TestHooks:
         assert sync_cb in calls and async_cb in calls
 
     @pytest.mark.asyncio
-    async def test_monitor_completion_does_not_leak_emitted_subjects_across_calls(
+    async def test_emitted_subjects_do_not_leak_across_execute_calls(
         self,
     ) -> None:
-        """Calling _monitor_completion twice on the same executor must re-emit
-        callbacks for tasks with subjects seen in a prior call (#162)."""
-        from telemachy.models import WorkflowState
-
+        """Reusing one executor for two workflows must re-emit on_task_complete
+        for a repeated task subject — the event-driven monitor's per-instance
+        _emitted_task_events set is reset at the top of each execute() (#162/#203)."""
         client = _make_mock_client()
-        client.get_tasks = AsyncMock(return_value=[{"subject": "T1", "status": "completed"}])
+        # Reconcile seeds "Task 1" as completed for both runs.
+        client.get_tasks = AsyncMock(return_value=[{"subject": "Task 1", "status": "completed"}])
 
         executor = WorkflowExecutor(client, poll_interval=0.01)
         calls: list[str] = []
         executor.add_hook("on_task_complete", lambda **kw: calls.append(kw["task"]["subject"]))
 
         spec = _make_spec()
-        state = WorkflowState(
-            workflow_id="wf-1",
-            spec=spec,
-            status="running",
-            started_at="2026-06-03T00:00:00+00:00",
-        )
-        state.created_teams = {"team-a": "team-id-001"}
+        await executor.execute(spec)
+        await executor.execute(spec)
 
-        await executor._monitor_completion(state)
-        await executor._monitor_completion(state)
-
-        # Each call must independently emit on_task_complete for T1.
-        assert calls == ["T1", "T1"], (
-            f"Expected two emissions across two monitor calls, got {calls!r} — "
-            "state leaked between calls (#162 regression)"
-        )
-
-        # And the executor must not retain any emitted-event state on self.
-        assert not hasattr(executor, "_emitted_task_events"), (
-            "WorkflowExecutor must not carry per-monitor state on self (#162)"
+        # Each execute() must independently emit on_task_complete for "Task 1".
+        assert calls == ["Task 1", "Task 1"], (
+            f"Expected two emissions across two execute() calls, got {calls!r} — "
+            "emitted-event state leaked between runs (#162/#203 regression)"
         )
 
 
@@ -1042,3 +1049,244 @@ async def test_workflow_spans_emit_end_to_end() -> None:
         await executor.execute(spec)
         # Verify get_tracer was called (indicating spans are being emitted)
         assert mock_tracer.call_count > 0
+
+
+# ---------------------------------------------------------------------------
+# Tests: NATS event-driven monitoring
+# ---------------------------------------------------------------------------
+
+
+class TestNatsMonitoring:
+    @pytest.mark.asyncio
+    async def test_executor_uses_nats_monitor_no_polling_loop(self) -> None:
+        """Test that monitoring uses NATS events, not HTTP polling."""
+        client = _make_mock_client()
+        spec = _make_spec(
+            tasks=[{"subject": "Task 1", "description": "...", "assign_to": "worker"}]
+        )
+
+        mock_monitor = _make_mock_monitor()
+
+        with patch("telemachy.executor.NatsMonitor", return_value=mock_monitor):
+            executor = WorkflowExecutor(client, poll_interval=5.0)
+            state = await executor.execute(spec)
+
+        # Verify monitoring is event-driven: get_tasks is called a bounded number
+        # of times (one reconcile snapshot + one idempotent task-reuse check per
+        # team) and NOT in a status-polling loop. With a single team that is at
+        # most 2 calls — never the dozens a polling loop would produce.
+        assert client.get_tasks.call_count <= 2
+        assert state.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_executor_propagates_nats_unavailable(self) -> None:
+        """Test that NATS unavailability causes workflow to fail."""
+        from telemachy.nats_monitor import NatsUnavailableError
+
+        client = _make_mock_client()
+        spec = _make_spec()
+
+        # NatsMonitor.__aenter__ raises (connection cannot be established).
+        mock_monitor = _make_mock_monitor()
+        mock_monitor.__aenter__.side_effect = NatsUnavailableError("NATS unreachable")
+
+        with patch("telemachy.executor.NatsMonitor", return_value=mock_monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
+        # Workflow should fail with NATS error
+        assert state.status == "failed"
+        assert "NATS" in state.error
+
+    @pytest.mark.asyncio
+    async def test_executor_handles_mid_workflow_disconnect(self) -> None:
+        """Test that mid-workflow NATS disconnect is detected."""
+        client = _make_mock_client()
+        spec = _make_spec()
+
+        # Connection drops mid-monitoring: terminal events never fire and the
+        # monitor reports disconnected, so _wait_for_all_terminal must bail out.
+        mock_monitor = _make_mock_monitor()
+        mock_monitor.connected = False
+        mock_monitor.latest_status = MagicMock(return_value="in_progress")
+
+        def _unset_event(_subject: str) -> asyncio.Event:
+            return asyncio.Event()  # never set
+
+        mock_monitor.terminal_event = MagicMock(side_effect=_unset_event)
+
+        with patch("telemachy.executor.NatsMonitor", return_value=mock_monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
+        # Should fail due to connection loss
+        assert state.status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_reconcile_initial_seeds_terminal_status(self) -> None:
+        """Test that _reconcile_initial loads initial task statuses."""
+        client = _make_mock_client()
+        spec = _make_spec(
+            tasks=[{"subject": "Task 1", "description": "...", "assign_to": "worker"}]
+        )
+
+        # Pretend the task is already completed before we start monitoring
+        client.get_tasks.return_value = [{"subject": "Task 1", "status": "completed"}]
+
+        mock_monitor = _make_mock_monitor()
+
+        with patch("telemachy.executor.NatsMonitor", return_value=mock_monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
+        # Should complete immediately since task is already terminal
+        assert state.status == "completed"
+        # record_status should have been called with the reconcile data
+        assert mock_monitor.record_status.called
+
+    @pytest.mark.asyncio
+    async def test_dep_unblock_waits_on_terminal_event_not_sleep(self) -> None:
+        """Test that dep-wait uses terminal events, not asyncio.sleep."""
+
+        client = _make_mock_client()
+        spec = _make_spec(
+            tasks=[
+                {"subject": "Task 1", "description": "...", "assign_to": "worker"},
+                {
+                    "subject": "Task 2",
+                    "description": "...",
+                    "assign_to": "worker",
+                    "blocked_by": ["Task 1"],
+                },
+            ]
+        )
+
+        client.create_task = AsyncMock(side_effect=["task-1", "task-2"])
+
+        mock_monitor = _make_mock_monitor()
+        mock_monitor.latest_status = MagicMock(
+            side_effect=lambda subj: {
+                "Task 1": "completed",
+                "Task 2": "completed",
+            }.get(subj)
+        )
+
+        with (
+            patch("telemachy.executor.NatsMonitor", return_value=mock_monitor),
+            patch("asyncio.sleep") as mock_sleep,
+        ):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
+            # asyncio.sleep should never be called (no polling in dep-wait)
+            mock_sleep.assert_not_called()
+
+        assert state.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_wait_for_all_terminal_skips_unsubmitted_tasks(self) -> None:
+        """Test that monitor skips tasks that were never submitted."""
+
+        client = _make_mock_client()
+        spec = _make_spec(
+            tasks=[
+                {"subject": "Task 1", "description": "...", "assign_to": "worker"},
+                {
+                    "subject": "Task 2",
+                    "description": "...",
+                    "assign_to": "worker",
+                    "blocked_by": ["Task 1"],
+                },
+                {"subject": "Task 3", "description": "...", "assign_to": "worker"},
+            ]
+        )
+
+        # Task 1 fails, Task 2 is skipped due to dep-failure, Task 3 completes
+        client.create_task = AsyncMock(side_effect=["task-1", "task-3"])
+
+        mock_monitor = _make_mock_monitor()
+        mock_monitor.latest_status = MagicMock(
+            side_effect=lambda subj: {
+                "Task 1": "failed",
+                "Task 3": "completed",
+                "Task 2": None,  # Should never be queried
+            }.get(subj)
+        )
+
+        def make_event(subj: str) -> asyncio.Event:
+            ev = asyncio.Event()
+            if subj in ("Task 1", "Task 3"):
+                ev.set()
+            return ev
+
+        mock_monitor.terminal_event = MagicMock(side_effect=make_event)
+
+        with patch("telemachy.executor.NatsMonitor", return_value=mock_monitor):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
+        # Should fail due to Task 1 failure (Task 2 skipped, Task 3 completed)
+        assert state.status == "failed"
+        # Task 2 should NOT be in submitted_task_subjects
+        assert "Task 2" not in state.submitted_task_subjects
+
+    @pytest.mark.skip(
+        reason="Cross-team blocked_by is rejected by TeamSpec.detect_dependency_cycles "
+        "(deps are validated per-team). Enabling cross-team dependencies is a separate "
+        "schema change (move dep validation to WorkflowSpec) tracked outside #3."
+    )
+    @pytest.mark.asyncio
+    async def test_submitted_event_wakes_cross_team_dep_wait(self) -> None:
+        """Test that submitted_event wakes dep-wait across teams."""
+
+        client = _make_mock_client()
+        # Two teams; team-b depends on team-a
+        spec = WorkflowSpec.model_validate(
+            {
+                "apiVersion": "telemachy/v1",
+                "metadata": {"name": "cross-team-deps", "description": "test"},
+                "agents": [
+                    {"name": "agent-a", "runtime": "local"},
+                    {"name": "agent-b", "runtime": "local"},
+                ],
+                "teams": [
+                    {
+                        "name": "team-a",
+                        "agents": ["agent-a"],
+                        "tasks": [
+                            {"subject": "Task A", "description": "...", "assign_to": "agent-a"}
+                        ],
+                    },
+                    {
+                        "name": "team-b",
+                        "agents": ["agent-b"],
+                        "tasks": [
+                            {
+                                "subject": "Task B",
+                                "description": "...",
+                                "assign_to": "agent-b",
+                                "blocked_by": ["Task A"],
+                            }
+                        ],
+                    },
+                ],
+                "teardown": "on_completion",
+            }
+        )
+
+        client.create_task = AsyncMock(side_effect=["task-a", "task-b"])
+        client.create_team = AsyncMock(side_effect=["team-a", "team-b"])
+
+        mock_monitor = _make_mock_monitor()
+
+        with (
+            patch("asyncio.sleep") as mock_sleep,
+            patch("telemachy.executor.NatsMonitor", return_value=mock_monitor),
+        ):
+            executor = WorkflowExecutor(client, poll_interval=0.01)
+            state = await executor.execute(spec)
+
+            # Should complete without polling sleeps
+            mock_sleep.assert_not_called()
+
+        assert state.status == "completed"
