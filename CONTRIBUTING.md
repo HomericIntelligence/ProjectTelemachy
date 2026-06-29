@@ -34,6 +34,8 @@ sending a PR that alters planned scope.
 - [Pixi](https://pixi.sh/) for environment management (installs Python 3.10+)
 - [Just](https://just.systems/) as the command runner
 
+**Supported platforms:** Linux (`linux-64`), macOS (`osx-64` Intel and `osx-arm64` Apple silicon), and Windows (`win-64`). All four are covered by CI; `pixi install` must succeed on each before merge.
+
 ### Environment Setup
 
 ```bash
