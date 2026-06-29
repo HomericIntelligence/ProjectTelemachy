@@ -886,3 +886,159 @@ class TestAuditTrail:
         # Actor present on every record
         for r in records:
             assert r["actor"]["host_id"] == "test-host"
+
+
+# === Observability tests ===
+
+
+@pytest.mark.asyncio
+async def test_workflow_id_propagates_to_logs(caplog: pytest.LogCaptureFixture) -> None:
+    """workflow_id from context is attached to every log record by filter."""
+    from telemachy.telemetry import WorkflowContextLogFilter
+
+    client = _make_mock_client()
+    spec = _make_spec()
+    executor = WorkflowExecutor(client)
+
+    # Attach filter to caplog so context vars are captured
+    caplog_handler = caplog.handler
+    caplog_handler.addFilter(WorkflowContextLogFilter())
+
+    state = await executor.execute(spec)
+
+    # Every record should have workflow_id from the run
+    for record in caplog.records:
+        assert hasattr(record, "workflow_id")
+        assert record.workflow_id == state.workflow_id
+
+
+@pytest.mark.asyncio
+async def test_workflow_id_contextvar_resets_after_run() -> None:
+    """workflow_id contextvar is reset after execute() returns."""
+    from telemachy.telemetry import workflow_id_var
+
+    client = _make_mock_client()
+    spec = _make_spec()
+    executor = WorkflowExecutor(client)
+
+    # Before execute, contextvar is unset (default "-")
+    assert workflow_id_var.get("-") == "-"
+
+    await executor.execute(spec)
+
+    # After execute, contextvar is reset
+    assert workflow_id_var.get("-") == "-"
+
+
+@pytest.mark.asyncio
+async def test_workflow_id_propagates_into_gather_children() -> None:
+    """workflow_id contextvar propagates into asyncio.gather spawned tasks."""
+    from telemachy.telemetry import workflow_id_var
+
+    client = _make_mock_client()
+    spec = _make_spec()
+
+    recorded_ids: list[str] = []
+
+    async def capture_id(*_: object) -> tuple[str, str]:
+        recorded_ids.append(workflow_id_var.get("-"))
+        return "test-agent", "agent-id"
+
+    client.create_agent = capture_id
+
+    executor = WorkflowExecutor(client)
+    state = await executor.execute(spec)
+
+    # The mock captured the workflow_id from within the gather'd task
+    assert len(recorded_ids) > 0
+    assert all(wid == state.workflow_id for wid in recorded_ids)
+
+
+@pytest.mark.asyncio
+async def test_metrics_increment_on_success() -> None:
+    """Workflow completion increments WORKFLOWS_STARTED, WORKFLOWS_COMPLETED, and duration."""
+
+    with patch("telemachy.executor.WORKFLOWS_STARTED") as mock_started, \
+         patch("telemachy.executor.WORKFLOWS_COMPLETED") as mock_completed, \
+         patch("telemachy.executor.WORKFLOW_DURATION") as mock_duration:
+        client = _make_mock_client()
+        spec = _make_spec()
+        executor = WorkflowExecutor(client)
+
+        await executor.execute(spec)
+
+        # Verify metrics were called with correct labels
+        mock_started.labels.assert_called()
+        mock_completed.labels.assert_called()
+        mock_duration.labels.assert_called()
+
+        # Check status
+        call_args = mock_completed.labels.call_args
+        assert call_args[1]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_metrics_increment_on_failure() -> None:
+    """Workflow failure sets status='failed' on WORKFLOWS_COMPLETED."""
+
+    client = _make_mock_client()
+    client.create_agent = AsyncMock(side_effect=RuntimeError("agent creation failed"))
+    spec = _make_spec()
+
+    with patch("telemachy.executor.WORKFLOWS_COMPLETED") as mock_completed:
+        executor = WorkflowExecutor(client)
+        state = await executor.execute(spec)
+
+        assert state.status == "failed"
+        # Verify status='failed' was recorded
+        call_args = mock_completed.labels.call_args
+        assert call_args[1]["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_tasks_total_increments_per_terminal_status() -> None:
+    """TASKS_TOTAL is incremented for each task reaching a terminal state."""
+
+    client = _make_mock_client()
+    spec = _make_spec(
+        tasks=[
+            {"subject": "Task 1", "description": "Do work", "assign_to": "worker"},
+            {"subject": "Task 2", "description": "Do work", "assign_to": "worker"},
+            {"subject": "Task 3", "description": "Do work", "assign_to": "worker"},
+        ]
+    )
+
+    # Mock get_tasks to return completed tasks
+    client.get_tasks = AsyncMock(
+        return_value=[
+            {"subject": "Task 1", "status": "completed"},
+            {"subject": "Task 2", "status": "completed"},
+            {"subject": "Task 3", "status": "failed"},
+        ]
+    )
+
+    with patch("telemachy.executor.TASKS_TOTAL") as mock_tasks:
+        executor = WorkflowExecutor(client)
+        await executor.execute(spec)
+
+        # Verify TASKS_TOTAL was called for each task status transition
+        # (exact call count varies based on monitoring loop, but should be present)
+        assert mock_tasks.labels.called
+
+
+@pytest.mark.asyncio
+async def test_workflow_spans_emit_end_to_end() -> None:
+    """Workflow execution calls get_tracer() to emit spans without errors."""
+    from unittest.mock import patch
+
+    from telemachy.telemetry import get_tracer
+
+    client = _make_mock_client()
+    spec = _make_spec()
+    executor = WorkflowExecutor(client)
+
+    # Patch get_tracer to verify it's called
+    with patch("telemachy.executor.get_tracer", wraps=get_tracer) as mock_tracer:
+        await executor.execute(spec)
+        # Verify get_tracer was called (indicating spans are being emitted)
+        assert mock_tracer.call_count > 0

@@ -19,6 +19,15 @@ from telemachy.audit import (
 )
 from telemachy.config import settings
 from telemachy.models import AgentSpec, TeamSpec, WorkflowSpec, WorkflowState
+from telemachy.telemetry import (
+    TASKS_TOTAL,
+    WORKFLOW_DURATION,
+    WORKFLOWS_COMPLETED,
+    WORKFLOWS_STARTED,
+    get_tracer,
+    workflow_id_var,
+    workflow_name_var,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +91,10 @@ class WorkflowExecutor:
         on_workflow_complete, on_workflow_failed.
         """
         if event not in self._hooks:
-            raise ValueError(f"Unknown hook event {event!r}. Valid events: {sorted(self._hooks)}")
+            raise ValueError(
+                f"Unknown hook event {event!r}. "
+                f"Valid events: {sorted(self._hooks)}"
+            )
         self._hooks[event].append(callback)
 
     def _persist(self, state: WorkflowState) -> None:
@@ -122,106 +134,137 @@ class WorkflowExecutor:
     async def _run(self, spec: WorkflowSpec, workflow_id: str | None = None) -> WorkflowState:
         """Internal execution body — wrapped by execute() with a timeout."""
         workflow_id = workflow_id or str(uuid.uuid4())[:8]
-        state = WorkflowState(
-            workflow_id=workflow_id,
-            spec=spec,
-            status="pending",
-            started_at=_now(),
-        )
-        self._persist(state)
-        logger.info("Starting workflow '%s' (id=%s)", spec.name, workflow_id)
-        self._sink.emit(
-            "workflow.started",
-            workflow_id=workflow_id,
-            spec_name=spec.name,
-            agents=[a.name for a in spec.agents],
-            teams=[t.name for t in spec.teams],
-            teardown=spec.teardown,
-        )
-
+        wf_token = workflow_id_var.set(workflow_id)
+        name_token = workflow_name_var.set(spec.name)
         try:
-            state.status = "running"
-            self._persist(state)
-
-            # Populate idempotency lookup tables (skipped on dry-run or force).
-            if not self._dry_run and not self._force:
-                if self._injected_snapshot is not None:
-                    agents_snapshot, teams_snapshot = self._injected_snapshot
-                else:
-                    agents_snapshot = await self._client.list_agents()
-                    teams_snapshot = await self._client.list_teams()
-                self._existing_agents_by_key = {
-                    str(a.get("name", "")): str(a.get("id", ""))
-                    for a in agents_snapshot
-                    if a.get("name") and a.get("id")
-                }
-                self._existing_teams_by_key = {
-                    str(t.get("name", "")): str(t.get("id", ""))
-                    for t in teams_snapshot
-                    if t.get("name") and t.get("id")
-                }
-
-            # Provision all agents concurrently. _provision_agents aliases its
-            # internal id_map to state.created_agents up front so teardown sees
-            # every successfully-created agent even on partial failure (#164).
-            await self._provision_agents(spec.agents, spec.name, state)
-            self._persist(state)
-
-            # Create teams and submit tasks (respecting dependencies)
-            state.created_teams = await self._create_teams(
-                spec.teams, state.created_agents, spec.name
-            )
-            self._persist(state)
-
-            # Monitor until all tasks reach a terminal state (skipped in dry-run)
-            if not self._dry_run:
-                await self._monitor_completion(state)
-            else:
-                logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
-
-            if state.status == "cancelled":
-                # Graceful stop-event cancellation — monitor returned early.
-                state.completed_at = _now()
-                logger.warning("Workflow '%s' was cancelled via stop event", spec.name)
-                self._sink.emit("workflow.cancelled", workflow_id=state.workflow_id, spec_name=spec.name)
-            else:
-                state.status = "completed"
-                state.completed_at = _now()
-                logger.info("Workflow '%s' completed successfully", spec.name)
-                self._sink.emit(
-                    "workflow.completed",
-                    workflow_id=state.workflow_id,
-                    spec_name=spec.name,
-                    duration_seconds=_duration(state),
+            with get_tracer().start_as_current_span(
+                "telemachy.workflow",
+                attributes={
+                    "telemachy.workflow_id": workflow_id,
+                    "telemachy.workflow_name": spec.name,
+                    "telemachy.agent_count": len(spec.agents),
+                    "telemachy.team_count": len(spec.teams),
+                },
+            ):
+                WORKFLOWS_STARTED.labels(workflow_name=spec.name).inc()
+                start = time.monotonic()
+                state = WorkflowState(
+                    workflow_id=workflow_id,
+                    spec=spec,
+                    status="pending",
+                    started_at=_now(),
                 )
-                await self._emit("on_workflow_complete", state=state)
+                self._persist(state)
+                logger.info("Starting workflow '%s' (id=%s)", spec.name, workflow_id)
+                self._sink.emit(
+                    "workflow.started",
+                    workflow_id=workflow_id,
+                    spec_name=spec.name,
+                    agents=[a.name for a in spec.agents],
+                    teams=[t.name for t in spec.teams],
+                    teardown=spec.teardown,
+                )
 
-        except asyncio.CancelledError:
-            state.status = "cancelled"
-            state.completed_at = _now()
-            logger.warning("Workflow '%s' was cancelled", spec.name)
-            self._persist(state)
-            self._sink.emit("workflow.cancelled", workflow_id=state.workflow_id, spec_name=spec.name)
-            raise
+                try:
+                    state.status = "running"
+                    self._persist(state)
 
-        except Exception as exc:
-            state.status = "failed"
-            state.completed_at = _now()
-            state.error = str(exc)
-            logger.error("Workflow '%s' failed: %s", spec.name, exc)
-            self._sink.emit(
-                "workflow.failed",
-                workflow_id=state.workflow_id,
-                spec_name=spec.name,
-                error=str(exc),
-            )
-            await self._emit("on_workflow_failed", state=state, error=exc)
+                    # Populate idempotency lookup tables (skipped on dry-run or force).
+                    if not self._dry_run and not self._force:
+                        if self._injected_snapshot is not None:
+                            agents_snapshot, teams_snapshot = self._injected_snapshot
+                        else:
+                            agents_snapshot = await self._client.list_agents()
+                            teams_snapshot = await self._client.list_teams()
+                        self._existing_agents_by_key = {
+                            str(a.get("name", "")): str(a.get("id", ""))
+                            for a in agents_snapshot
+                            if a.get("name") and a.get("id")
+                        }
+                        self._existing_teams_by_key = {
+                            str(t.get("name", "")): str(t.get("id", ""))
+                            for t in teams_snapshot
+                            if t.get("name") and t.get("id")
+                        }
 
+                    # Provision all agents concurrently. _provision_agents aliases its
+                    # internal id_map to state.created_agents up front so teardown sees
+                    # every successfully-created agent even on partial failure (#164).
+                    await self._provision_agents(spec.agents, spec.name, state)
+                    self._persist(state)
+
+                    # Create teams and submit tasks (respecting dependencies)
+                    state.created_teams = await self._create_teams(
+                        spec.teams, state.created_agents, spec.name
+                    )
+                    self._persist(state)
+
+                    # Monitor until all tasks reach a terminal state (skipped in dry-run)
+                    if not self._dry_run:
+                        await self._monitor_completion(state)
+                    else:
+                        logger.info("[dry-run] Skipping monitoring — no real tasks submitted")
+
+                    if state.status == "cancelled":
+                        # Graceful stop-event cancellation — monitor returned early.
+                        state.completed_at = _now()
+                        logger.warning("Workflow '%s' was cancelled via stop event", spec.name)
+                        self._sink.emit(
+                            "workflow.cancelled",
+                            workflow_id=state.workflow_id,
+                            spec_name=spec.name,
+                        )
+                    else:
+                        state.status = "completed"
+                        state.completed_at = _now()
+                        logger.info("Workflow '%s' completed successfully", spec.name)
+                        self._sink.emit(
+                            "workflow.completed",
+                            workflow_id=state.workflow_id,
+                            spec_name=spec.name,
+                            duration_seconds=_duration(state),
+                        )
+                        await self._emit("on_workflow_complete", state=state)
+
+                except asyncio.CancelledError:
+                    state.status = "cancelled"
+                    state.completed_at = _now()
+                    logger.warning("Workflow '%s' was cancelled", spec.name)
+                    self._persist(state)
+                    self._sink.emit(
+                        "workflow.cancelled",
+                        workflow_id=state.workflow_id,
+                        spec_name=spec.name,
+                    )
+                    raise
+
+                except Exception as exc:
+                    state.status = "failed"
+                    state.completed_at = _now()
+                    state.error = str(exc)
+                    logger.error("Workflow '%s' failed: %s", spec.name, exc)
+                    self._sink.emit(
+                        "workflow.failed",
+                        workflow_id=state.workflow_id,
+                        spec_name=spec.name,
+                        error=str(exc),
+                    )
+                    await self._emit("on_workflow_failed", state=state, error=exc)
+
+                finally:
+                    self._persist(state)
+                    await self._teardown(state)
+                    WORKFLOW_DURATION.labels(
+                        workflow_name=spec.name, status=state.status
+                    ).observe(time.monotonic() - start)
+                    WORKFLOWS_COMPLETED.labels(
+                        workflow_name=spec.name, status=state.status
+                    ).inc()
+
+                return state
         finally:
-            self._persist(state)
-            await self._teardown(state)
-
-        return state
+            workflow_id_var.reset(wf_token)
+            workflow_name_var.reset(name_token)
 
     # === Provisioning ===
 
@@ -238,29 +281,32 @@ class WorkflowExecutor:
         create_agent returns, BEFORE wake_agent runs, so teardown sees every
         created agent even if wake_agent or a sibling coroutine fails (#164).
         """
-        logger.info("Provisioning %d agent(s)...", len(agents))
+        with get_tracer().start_as_current_span(
+            "telemachy.provision_agents", attributes={"telemachy.agent_count": len(agents)}
+        ):
+            logger.info("Provisioning %d agent(s)...", len(agents))
 
-        # Shared id map — mutated by _provision_one_agent the instant each
-        # create_agent call returns. Aliased to state.created_agents so teardown
-        # sees newly-created agents even if the workflow raises mid-fan-out (#164).
-        id_map: dict[str, str] = {}
-        state.created_agents = id_map
+            # Shared id map — mutated by _provision_one_agent the instant each
+            # create_agent call returns. Aliased to state.created_agents so teardown
+            # sees newly-created agents even if the workflow raises mid-fan-out (#164).
+            id_map: dict[str, str] = {}
+            state.created_agents = id_map
 
-        async def _bounded(agent: AgentSpec) -> tuple[str, str]:
-            async with self._provision_semaphore:
-                return await self._provision_one_agent(agent, workflow_name, id_map)
+            async def _bounded(agent: AgentSpec) -> tuple[str, str]:
+                async with self._provision_semaphore:
+                    return await self._provision_one_agent(agent, workflow_name, id_map)
 
-        coros = [_bounded(agent) for agent in agents]
-        raw_results: list[tuple[str, str] | BaseException] = await asyncio.gather(
-            *coros, return_exceptions=True
-        )
-        first_exc: BaseException | None = next(
-            (r for r in raw_results if isinstance(r, BaseException)), None
-        )
-        if first_exc is not None:
-            raise first_exc
-        logger.info("All agents provisioned: %s", id_map)
-        return id_map
+            coros = [_bounded(agent) for agent in agents]
+            raw_results: list[tuple[str, str] | BaseException] = await asyncio.gather(
+                *coros, return_exceptions=True
+            )
+            first_exc: BaseException | None = next(
+                (r for r in raw_results if isinstance(r, BaseException)), None
+            )
+            if first_exc is not None:
+                raise first_exc
+            logger.info("All agents provisioned: %s", id_map)
+            return id_map
 
     async def _provision_one_agent(
         self,
@@ -348,10 +394,13 @@ class WorkflowExecutor:
         Teams are provisioned in parallel via asyncio.gather (see #55).
         Returns {team_name: team_id}.
         """
-        results: list[tuple[str, str]] = await asyncio.gather(
-            *[self._create_team(team_spec, agent_ids, workflow_name) for team_spec in teams]
-        )
-        return dict(results)
+        with get_tracer().start_as_current_span(
+            "telemachy.create_teams", attributes={"telemachy.team_count": len(teams)}
+        ):
+            results: list[tuple[str, str]] = await asyncio.gather(
+                *[self._create_team(team_spec, agent_ids, workflow_name) for team_spec in teams]
+            )
+            return dict(results)
 
     async def _create_team(
         self,
@@ -408,7 +457,7 @@ class WorkflowExecutor:
         If a dependency has failed/errored/cancelled, the dependent task is skipped
         rather than waiting forever (prevents infinite loop — see #13).
         """
-        submitted: dict[str, str] = {}  # subject → task_id
+        submitted: dict[str, str] = {}   # subject → task_id
         completed_subjects: set[str] = set()
         failed_subjects: set[str] = set()
         skipped_subjects: set[str] = set()
@@ -435,24 +484,22 @@ class WorkflowExecutor:
         while pending:
             # Skip tasks whose dependencies have failed
             newly_skipped = [
-                t
-                for t in pending
+                t for t in pending
                 if any(dep in failed_subjects or dep in skipped_subjects for dep in t.blocked_by)
             ]
             for task_spec in newly_skipped:
                 logger.warning(
                     "Skipping task '%s': a dependency failed or was skipped (%s)",
                     task_spec.subject,
-                    [
-                        dep
-                        for dep in task_spec.blocked_by
-                        if dep in failed_subjects or dep in skipped_subjects
-                    ],
+                    [dep for dep in task_spec.blocked_by if dep in failed_subjects or dep in skipped_subjects],
                 )
                 skipped_subjects.add(task_spec.subject)
                 pending.remove(task_spec)
 
-            ready = [t for t in pending if all(dep in completed_subjects for dep in t.blocked_by)]
+            ready = [
+                t for t in pending
+                if all(dep in completed_subjects for dep in t.blocked_by)
+            ]
             if not ready:
                 if not pending:
                     break
@@ -472,9 +519,7 @@ class WorkflowExecutor:
                 continue
 
             for task_spec in ready:
-                blocked_by_ids = [
-                    submitted[dep] for dep in task_spec.blocked_by if dep in submitted
-                ]
+                blocked_by_ids = [submitted[dep] for dep in task_spec.blocked_by if dep in submitted]
                 # Resolve agent name → Agamemnon agent ID before submitting (#12)
                 resolved_agent_id: str | None = None
                 if task_spec.assign_to:
@@ -510,18 +555,19 @@ class WorkflowExecutor:
         mid-workflow. If connectivity is lost, raises WorkflowConnectivityError
         which sets state.connectivity_failed for teardown.
         """
-        logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
-        connectivity_lost = asyncio.Event()
-        heartbeat = asyncio.create_task(
-            self._heartbeat(state.spec.name, connectivity_lost),
-            name=f"telemachy-heartbeat-{state.workflow_id}",
-        )
-        try:
-            await self._poll_until_done(state, connectivity_lost)
-        finally:
-            heartbeat.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await heartbeat
+        with get_tracer().start_as_current_span("telemachy.monitor_completion"):
+            logger.info("Monitoring workflow '%s' for completion...", state.spec.name)
+            connectivity_lost = asyncio.Event()
+            heartbeat = asyncio.create_task(
+                self._heartbeat(state.spec.name, connectivity_lost),
+                name=f"telemachy-heartbeat-{state.workflow_id}",
+            )
+            try:
+                await self._poll_until_done(state, connectivity_lost)
+            finally:
+                heartbeat.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await heartbeat
 
     async def _heartbeat(self, workflow_name: str, connectivity_lost: asyncio.Event) -> None:
         """Background task that probes Agamemnon liveness on a timer.
@@ -608,6 +654,8 @@ class WorkflowExecutor:
                     task_subject = str(task.get("subject", ""))
                     if status not in _DONE_STATUSES:
                         all_done = False
+                    if status in _DONE_STATUSES and task_subject not in emitted_done:
+                        TASKS_TOTAL.labels(status=status).inc()
                     if status in {"failed", "error"}:
                         any_failed = True
                         logger.warning(
@@ -646,46 +694,52 @@ class WorkflowExecutor:
 
     async def _teardown(self, state: WorkflowState) -> None:
         """Delete agents and teams based on the workflow's teardown policy."""
-        if self._dry_run:
-            logger.info("[dry-run] Skipping teardown")
-            return
+        with get_tracer().start_as_current_span(
+            "telemachy.teardown",
+            attributes={"telemachy.policy": state.spec.teardown, "telemachy.status": state.status},
+        ):
+            if self._dry_run:
+                logger.info("[dry-run] Skipping teardown")
+                return
 
-        policy = state.spec.teardown
+            policy = state.spec.teardown
 
-        # A connectivity-induced failure should still honour an `on_completion`
-        # policy — the workflow author asked us to clean up after this workflow,
-        # and "Agamemnon went away mid-run" should not leak agents and teams
-        # (see #161). We do NOT extend on_completion to *task* failures, which
-        # are the existing "leave for inspection" behaviour.
-        should_teardown = (
-            (policy == "on_completion" and state.status == "completed")
-            or (policy == "on_completion" and state.connectivity_failed)
-            or (policy == "on_failure" and state.status == "failed")
-        )
+            # A connectivity-induced failure should still honour an `on_completion`
+            # policy — the workflow author asked us to clean up after this workflow,
+            # and "Agamemnon went away mid-run" should not leak agents and teams
+            # (see #161). We do NOT extend on_completion to *task* failures, which
+            # are the existing "leave for inspection" behaviour.
+            should_teardown = (
+                (policy == "on_completion" and state.status == "completed")
+                or (policy == "on_completion" and state.connectivity_failed)
+                or (policy == "on_failure" and state.status == "failed")
+            )
 
-        if not should_teardown:
-            logger.info("Teardown skipped (policy=%s, status=%s)", policy, state.status)
-            return
+            if not should_teardown:
+                logger.info(
+                    "Teardown skipped (policy=%s, status=%s)", policy, state.status
+                )
+                return
 
-        logger.info("Running teardown for workflow '%s'...", state.spec.name)
+            logger.info("Running teardown for workflow '%s'...", state.spec.name)
 
-        for name, team_id in state.created_teams.items():
-            try:
-                await self._client.delete_team(team_id)
-                logger.debug("Deleted team '%s' (id=%s)", name, team_id)
-                self._sink.emit("team.deleted", team_name=name, team_id=team_id)
-            except AgamemnonError as exc:
-                logger.warning("Failed to delete team '%s': %s", name, exc)
+            for name, team_id in state.created_teams.items():
+                try:
+                    await self._client.delete_team(team_id)
+                    logger.debug("Deleted team '%s' (id=%s)", name, team_id)
+                    self._sink.emit("team.deleted", team_name=name, team_id=team_id)
+                except AgamemnonError as exc:
+                    logger.warning("Failed to delete team '%s': %s", name, exc)
 
-        for name, agent_id in state.created_agents.items():
-            try:
-                await self._client.delete_agent(agent_id)
-                logger.debug("Deleted agent '%s' (id=%s)", name, agent_id)
-                self._sink.emit("agent.deleted", agent_name=name, agent_id=agent_id)
-            except AgamemnonError as exc:
-                logger.warning("Failed to delete agent '%s': %s", name, exc)
+            for name, agent_id in state.created_agents.items():
+                try:
+                    await self._client.delete_agent(agent_id)
+                    logger.debug("Deleted agent '%s' (id=%s)", name, agent_id)
+                    self._sink.emit("agent.deleted", agent_name=name, agent_id=agent_id)
+                except AgamemnonError as exc:
+                    logger.warning("Failed to delete agent '%s': %s", name, exc)
 
-        logger.info("Teardown complete")
+            logger.info("Teardown complete")
 
 
 def _now() -> str:

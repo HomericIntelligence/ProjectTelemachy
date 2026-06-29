@@ -35,14 +35,54 @@ logger = logging.getLogger(__name__)
 
 
 def _setup_logging() -> None:
-    """Configure logging from settings (LOG_LEVEL env var, default INFO)."""
-    level = getattr(logging, settings.log_level.upper(), logging.INFO)
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S",
+    """Configure logging from settings (LOG_LEVEL, LOG_FORMAT env vars).
+
+    Sets up correlation ID injection, JSON or plain formatters, and optionally
+    starts OpenTelemetry tracing and Prometheus metrics (before any httpx clients
+    are instantiated so HTTPXClientInstrumentor patches the class).
+    """
+    from telemachy.telemetry import (
+        JsonFormatter,
+        SafePlainFormatter,
+        TelemachyDefaultHandler,
+        WorkflowContextLogFilter,
+        setup_metrics,
+        setup_tracing,
     )
 
+    level = getattr(logging, settings.log_level.upper(), logging.INFO)
+    root = logging.getLogger()
+
+    # Remove only handlers Telemachy itself installed — caplog and
+    # library-installed handlers are preserved.
+    for h in list(root.handlers):
+        if isinstance(h, TelemachyDefaultHandler):
+            root.removeHandler(h)
+
+    handler = TelemachyDefaultHandler()
+    handler.addFilter(WorkflowContextLogFilter())
+    if settings.log_format == "json":
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler.setFormatter(
+            SafePlainFormatter(
+                "%(asctime)s %(levelname)s [wf=%(workflow_id)s] %(name)s %(message)s",
+                datefmt="%Y-%m-%dT%H:%M:%S",
+            )
+        )
+    root.setLevel(level)
+    root.addHandler(handler)
+
+    # OTel MUST be set up BEFORE httpx clients are instantiated so the
+    # HTTPXClientInstrumentor patches the class before any AsyncClient
+    # is created. Both clients in this codebase are created inside
+    # async functions called after _setup_logging() runs, so this
+    # ordering is satisfied by construction (cli.run → asyncio.run →
+    # AgamemnonClient context manager).
+    if settings.otel_enabled:
+        setup_tracing(settings.otel_service_name)
+    if settings.metrics_enabled:
+        setup_metrics(settings.metrics_port)
 
 _SHELL_METACHARACTERS: re.Pattern[str] = re.compile(r"[;&|$`><(){}\[\]!?*~\\]")
 
@@ -55,7 +95,9 @@ def _validate_workflow_path(path: Path) -> None:
     """
     raw = str(path)
     if _SHELL_METACHARACTERS.search(raw):
-        raise typer.BadParameter(f"Workflow path contains disallowed shell metacharacters: {raw!r}")
+        raise typer.BadParameter(
+            f"Workflow path contains disallowed shell metacharacters: {raw!r}"
+        )
     if not path.exists():
         raise typer.BadParameter(f"Workflow file not found: {raw!r}")
     if not path.is_file():
@@ -257,7 +299,8 @@ def run(
         else:
             console.print(
                 f"[bold red]Workflow {result.status}.[/bold red] "
-                f"id={result.workflow_id}" + (f"  error={result.error}" if result.error else "")
+                f"id={result.workflow_id}"
+                + (f"  error={result.error}" if result.error else "")
             )
             raise typer.Exit(1)
 
@@ -276,12 +319,7 @@ def plan(
 
 @app.command()
 def validate(
-    workflow_path: Annotated[
-        Path,
-        typer.Argument(
-            help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)"
-        ),
-    ],
+    workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
 ) -> None:
     """Validate a workflow YAML file against the Telemachy schema."""
     _validate_workflow_path(workflow_path)
@@ -371,14 +409,12 @@ def cancel(
 def schema(
     output: Path = typer.Option(  # noqa: B008
         Path("schemas/workflow-v1.json"),
-        "--output",
-        "-o",
+        "--output", "-o",
         help="Path to write the JSON Schema file",
     ),
 ) -> None:
     """Export the workflow YAML JSON Schema for editor validation."""
     from telemachy.schema import write_workflow_schema
-
     output.parent.mkdir(parents=True, exist_ok=True)
     write_workflow_schema(output)
     typer.echo(f"Schema written to {output}")
