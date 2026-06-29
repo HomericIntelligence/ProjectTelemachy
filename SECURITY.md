@@ -118,6 +118,13 @@ When contributing to ProjectTelemachy:
 - Use environment variables for NATS and Agamemnon connection details
 - Restrict executable commands in workflow steps
 
+## Privacy & PII in Workflow Text
+
+Workflow `subject` and `description` fields are forwarded verbatim to
+ProjectAgamemnon, and `subject` is also emitted to Telemachy logs at INFO.
+See [`docs/privacy.md`](docs/privacy.md) for author guidance, the full
+data-flow table, and operator-side controls.
+
 ## Contact
 
 For security-related questions that are not vulnerability reports:
