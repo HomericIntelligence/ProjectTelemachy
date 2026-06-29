@@ -50,12 +50,16 @@ lint:
 mypy:
     pixi run mypy src/telemachy --ignore-missing-imports
 
+# Run Bandit SAST scan (medium+ severity)
+bandit:
+    pixi run python -m bandit -ll --ini .bandit -r src/telemachy
+
 # Format code with ruff
 format:
     pixi run ruff format src tests
 
-# Run the full local CI suite: lint, mypy, tests
-check: lint mypy test
+# Run the full local CI suite: lint, mypy, bandit, tests
+check: lint mypy bandit test
 
 # Install dev dependencies and set up pre-commit hooks
 bootstrap:
