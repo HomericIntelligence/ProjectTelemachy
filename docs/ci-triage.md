@@ -34,7 +34,7 @@ Look for the specific error message. Common patterns:
 
 ### 2. Check GitHub Status
 
-Visit https://www.githubstatus.com/ and check if there is an active or recent incident affecting GitHub Actions
+Visit <https://www.githubstatus.com/> and check if there is an active or recent incident affecting GitHub Actions
 at the time of the failure. Note the incident ID if one matches the failure timestamp.
 
 ### 3. Re-run the Job
@@ -60,8 +60,11 @@ Then observe the new run. If it passes, the failure was transient.
 
 ### 4. Interpret the Result
 
-- **Re-run passes** → failure was transient. File it as such. Link the GitHub status incident (if any) in a closing comment. Close the tracking issue.
-- **Re-run fails on the same step and same SHA** → not transient; proceed to repo-side audit (next section).
+- **Re-run passes** → failure was transient. File it as such. Link the
+  GitHub status incident (if any) in a closing comment. Close the tracking
+  issue.
+- **Re-run fails on the same step and same SHA** → not transient; proceed
+  to repo-side audit (next section).
 
 ## Repo-Side Audit (Three Checks)
 
@@ -84,6 +87,7 @@ permissions:
 ```
 
 **What to look for:**
+
 - Overly broad scopes (e.g., `pull-requests: write` when not needed)
 - Missing scopes that a step actually requires (unlikely, but possible)
 
@@ -104,6 +108,7 @@ Verify every `runs-on:` uses a standard GitHub-hosted label:
 - A self-hosted label that you know is online and healthy
 
 **What to look for:**
+
 - Non-standard or misspelled labels
 - Self-hosted labels that are offline
 - Deprecated runner labels (e.g., `ubuntu-18.04`)
@@ -111,7 +116,11 @@ Verify every `runs-on:` uses a standard GitHub-hosted label:
 ### Check 3: Secrets References
 
 ```bash
-grep -oE '\$\{\{[[:space:]]*secrets\.[A-Z_]+[[:space:]]*\}\}' .github/workflows/ci.yml | sed 's/.*secrets\.//' | sed 's/[[:space:]]*}}.*//' | sort -u
+grep -oE '\$\{\{[[:space:]]*secrets\.[A-Z_]+[[:space:]]*\}\}' \
+  .github/workflows/ci.yml \
+  | sed 's/.*secrets\.//' \
+  | sed 's/[[:space:]]*}}.*//' \
+  | sort -u
 ```
 
 Compare the referenced secret names against the configured secrets in the repo:
@@ -121,8 +130,11 @@ gh secret list --repo HomericIntelligence/ProjectTelemachy --json name --jq '.[]
 ```
 
 **What to look for:**
-- Any secret referenced in the workflow but NOT in the `gh secret list` output — this is a defect.
-- Example: if the workflow uses `${{ secrets.GITLEAKS_LICENSE }}` but `GITLEAKS_LICENSE` is not in the repo's secret list, you must either:
+
+- Any secret referenced in the workflow but NOT in the `gh secret list`
+  output — this is a defect.
+- Example: if the workflow uses `${{ secrets.GITLEAKS_LICENSE }}` but
+  `GITLEAKS_LICENSE` is not in the repo's secret list, you must either:
   - Add the secret to the repo via GitHub Settings (out-of-band)
   - Remove the reference from the workflow if it's not actually used
 
@@ -141,7 +153,8 @@ the issue is likely a GitHub Actions infrastructure problem or a runner-environm
 ## Related Issues
 
 - **Issue #219** — example case: CI workflow 'Set up job' failure, root cause was invalid pixi action SHA (since fixed).
-  See git history for the fix in commits 87dc30e and subsequent dependency bumps.
+  Fixed by PR #221 (commit `87dc30e`, "correct setup-pixi SHA pin to valid
+  v0.8.1 commit") and subsequent dependency bumps.
 - **Issue #151** — workflow analysis and GitHub reusable-workflow strategy (referenced for scope justification).
 
 ## Common Root Causes (by frequency)
@@ -163,7 +176,7 @@ the issue is likely a GitHub Actions infrastructure problem or a runner-environm
 4. **Runner allocation or GitHub Actions service disruption**
    - GitHub's runner infrastructure is temporarily unavailable or overloaded
    - Fix: wait and re-run; these are almost always transient
-   - Check https://www.githubstatus.com/ for ongoing incidents
+   - Check <https://www.githubstatus.com/> for ongoing incidents
 
 5. **Over-broad or missing token permissions**
    - The `permissions:` block is missing or doesn't include a required scope
