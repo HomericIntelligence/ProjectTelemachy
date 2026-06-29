@@ -150,3 +150,32 @@ class TestDependencyCycleDetection:
         # Should not raise
         spec = WorkflowSpec.model_validate(make_two_task_dep_dict())
         assert spec is not None
+
+
+class TestDuplicateAgentNames:
+    def test_workflow_spec_rejects_duplicate_agent_names(self) -> None:
+        """Two AgentSpec entries with the same name must be rejected at parse
+        time — otherwise they would silently overwrite each other in
+        state.created_agents and orphan the first agent (#164)."""
+        yaml_text = """
+apiVersion: telemachy/v1
+metadata:
+  name: dup-agents
+  description: dup
+agents:
+  - name: worker
+    runtime: local
+  - name: worker
+    runtime: local
+teams:
+  - name: t
+    agents: [worker]
+    tasks:
+      - subject: T
+        description: ...
+        assign_to: worker
+teardown: never
+"""
+        data = yaml.safe_load(yaml_text)
+        with pytest.raises(ValueError, match="Duplicate agent names"):
+            WorkflowSpec.model_validate(data)
