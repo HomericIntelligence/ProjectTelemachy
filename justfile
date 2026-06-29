@@ -24,6 +24,11 @@ plan WORKFLOW:
 validate WORKFLOW:
     pixi run python -m telemachy.cli validate "{{WORKFLOW}}"
 
+# Run the read-only MCP server over stdio (for local smoke testing)
+mcp:
+    AGAMEMNON_URL={{AGAMEMNON_URL}} NATS_URL={{NATS_URL}} \
+        pixi run telemachy-mcp
+
 # Export workflow JSON Schema for editor validation
 schema:
     pixi run python -m telemachy.cli schema

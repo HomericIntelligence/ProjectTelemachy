@@ -13,6 +13,10 @@ provisioned resources according to your policy.
 
 No separate agent system is used. All execution is driven exclusively through ProjectAgamemnon.
 
+## MCP Server
+
+See [docs/mcp.md](docs/mcp.md) for the read-only MCP server that lets AI agents query live Agamemnon state during development.
+
 ## Quick Start
 
 ```bash

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "telemachy-agamemnon": {
+      "type": "stdio",
+      "command": "telemachy-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
