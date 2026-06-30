@@ -1,5 +1,7 @@
 # ProjectTelemachy
 
+[![CI](https://github.com/HomericIntelligence/ProjectTelemachy/actions/workflows/ci.yml/badge.svg)](https://github.com/HomericIntelligence/ProjectTelemachy/actions/workflows/ci.yml)
+
 A declarative workflow engine for [ProjectAgamemnon](https://github.com/HomericIntelligence/ProjectAgamemnon).
 Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, completion monitoring,
 and teardown via the Agamemnon REST API.
