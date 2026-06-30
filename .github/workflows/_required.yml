@@ -367,7 +367,12 @@ jobs:
           path: dist/
       - name: Validate distribution metadata (twine check)
         run: |
-          pip install twine --quiet
+          set -euo pipefail
+          # packaging>=24.2 is required: hatchling emits a Metadata-Version 2.4
+          # 'License-File' field, and packaging 24.0 (which twine 6.1.0 may
+          # otherwise resolve) rejects it as a "malformed field 'license-file'".
+          # 24.2 fixed that parser bug. See PEP 639.
+          pip install twine 'packaging>=24.2' --quiet
           ls -la dist/
           twine check dist/*
 
