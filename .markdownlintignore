@@ -1,0 +1,4 @@
+# Auto-generated myrmidon prompt files contain untrusted content
+.claude-prompt-*.md
+.claude-followup-*.md
+.pixi/
