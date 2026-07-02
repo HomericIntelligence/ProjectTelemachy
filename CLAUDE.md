@@ -100,7 +100,8 @@ teardown: on_completion | on_failure | never
    - **Correlation IDs**: Every log record carries a per-execution `workflow_id` for end-to-end tracing.
    - **Structured logging**: Logs can be emitted as plain text or JSON via `LOG_FORMAT` setting.
    - **Prometheus metrics**: Workflow completion, task outcomes, and HTTP latency are exposed when `METRICS_ENABLED=true`.
-   - **OpenTelemetry tracing**: Spans are emitted for each workflow phase (provisioning, team creation, monitoring, teardown) when `OTEL_ENABLED=true`.
+   - **OpenTelemetry tracing**: Spans are emitted for each workflow phase (provisioning, team creation, monitoring,
+     teardown) when `OTEL_ENABLED=true`.
 6. **Type-safe** — all Python code uses type hints; Pydantic validates all external data.
 
 ## Repository Structure
@@ -149,8 +150,16 @@ tested (`tests/test_roadmap.py`).
 - Use `httpx.AsyncClient` for all HTTP calls; never `requests`.
 - Pydantic v2 models for all structured data.
 - Errors from Agamemnon should raise typed exceptions, not generic ones.
-- Tests are split into **unit** tests (mock `AgamemnonClient`) and **integration** tests (drive a real `httpx.AsyncClient` through `tests/stub_agamemnon.py`, an in-process ASGI stub). Mark new lifecycle/end-to-end tests with `@pytest.mark.integration`. `just test` runs the full suite (unit + integration); `just test-unit` skips integration for fast iteration; `just test-integration` runs only the lifecycle suite. The stub returns HTTP 501 (not 404) for any endpoint it does not implement so that a new Agamemnon endpoint surfaces as a named test failure. Integration tests construct stub-bound clients through `make_client_for(stub)` and register them with the `client_pool` fixture — never inline `httpx.AsyncClient(...)` in a test.
-- CI enforces a `--cov-fail-under=75` coverage floor (sourced from `pyproject.toml` `[tool.coverage.report]`). Local `just test` does not pass `--cov` by default — reproduce the CI check with `pixi run pytest --cov=telemachy --cov-report=term-missing`.
+- Tests are split into **unit** tests (mock `AgamemnonClient`) and **integration** tests (drive a real
+  `httpx.AsyncClient` through `tests/stub_agamemnon.py`, an in-process ASGI stub). Mark new lifecycle/end-to-end tests
+  with `@pytest.mark.integration`. `just test` runs the full suite (unit + integration); `just test-unit` skips
+  integration for fast iteration; `just test-integration` runs only the lifecycle suite. The stub returns HTTP 501 (not
+  404) for any endpoint it does not implement so that a new Agamemnon endpoint surfaces as a named test failure.
+  Integration tests construct stub-bound clients through `make_client_for(stub)` and register them with the
+  `client_pool` fixture — never inline `httpx.AsyncClient(...)` in a test.
+- CI enforces a `--cov-fail-under=75` coverage floor (sourced from `pyproject.toml` `[tool.coverage.report]`). Local
+  `just test` does not pass `--cov` by default — reproduce the CI check with `pixi run pytest --cov=telemachy
+  --cov-report=term-missing`.
 - All `src/` Python must pass `pixi run python -m bandit -ll --ini .bandit`. Suppress
   findings inline with `# nosec <ID>  # <one-line rationale>`, not by widening
   the `.bandit` `skips` list. When adding a new package under `src/<name>/`,
@@ -216,7 +225,8 @@ event ingestion (#92), which scopes live task-lifecycle events only.
 
 - `just test` — full suite (unit + integration); this is what CI runs
 - `just test-unit` — unit tests only; mocks `AgamemnonClient` at the method level
-- `just test-integration` — integration tests under `tests/integration/`; exercises `WorkflowExecutor` against an in-process mock Agamemnon HTTP server (`respx`)
+- `just test-integration` — integration tests under `tests/integration/`; exercises `WorkflowExecutor` against an
+  in-process mock Agamemnon HTTP server (`respx`)
 
 Integration tests must declare `pytestmark = [pytest.mark.integration, pytest.mark.asyncio]` at the top of each module.
 
@@ -256,7 +266,7 @@ path that covers permissions, runner labels, and secrets references.
 | `OTEL_SERVICE_NAME` | `telemachy` | Service name for OpenTelemetry resource |
 | `OTEL_EXPORTER` | `console` | OTel exporter type (only `console` supported in this release; OTLP is a planned follow-up) |
 
-## Implementation Status
+## State Persistence Status
 
 ### ✅ Implemented
 

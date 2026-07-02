@@ -1,6 +1,8 @@
 # MCP (Model Context Protocol) Server
 
-The ProjectTelemachy MCP server (`telemachy-mcp`) provides read-only access to live Agamemnon state during development. It allows AI agents working in this repository to query agents and tasks without requiring direct HTTP access to the Agamemnon API.
+The ProjectTelemachy MCP server (`telemachy-mcp`) provides read-only access to live Agamemnon state during development.
+It allows AI agents working in this repository to query agents and tasks without requiring direct HTTP access to the
+Agamemnon API.
 
 ## What It Exposes
 
@@ -13,7 +15,8 @@ Two tools, both read-only:
 
 ## Enabling the Server
 
-The `.mcp.json` at the repository root is auto-discovered by Claude Code. It automatically spawns the `telemachy-mcp` console script when Claude Code opens the project.
+The `.mcp.json` at the repository root is auto-discovered by Claude Code. It automatically spawns the `telemachy-mcp`
+console script when Claude Code opens the project.
 
 No configuration is required beyond the environment variables listed below.
 
@@ -66,8 +69,11 @@ just mcp
 The following are explicitly deferred or out-of-scope:
 
 - **Write endpoints** — No endpoints for creating, starting, or deleting agents; no task assignment. The server is read-only.
-- **NATS subscription** — Live event monitoring via NATS is planned under issue #92 and not yet wired. No NATS state is exposed.
+- **NATS subscription** — Live event monitoring via NATS is planned under issue #92 and not yet wired. No NATS state is
+  exposed.
 
 ## Implementation
 
-See [issue #173](https://github.com/ProjectTelemachy/telemachy/issues/173) for full details. The implementation uses a plan-owned `Dispatcher` seam in `src/telemachy/mcp_server.py` to keep tests isolated from the MCP SDK's private internals.
+See [issue #173](https://github.com/ProjectTelemachy/telemachy/issues/173) for full details. The implementation uses a
+plan-owned `Dispatcher` seam in `src/telemachy/mcp_server.py` to keep tests isolated from the MCP SDK's private
+internals.

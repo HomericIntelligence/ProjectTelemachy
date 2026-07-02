@@ -31,11 +31,13 @@ not yet built.
 ## Consequences
 
 Positive:
+
 - Single discoverable source for "what is planned".
 - Drift surfaces as a CI failure rather than a stale prose snippet.
 - ADRs and roadmap rows cross-reference each other.
 
 Negative:
+
 - Two places to update when planning changes: the roadmap row and the
   issue/ADR. Mitigated by the regression test, which fails if rows
   point at dead links.
