@@ -84,6 +84,7 @@ def _setup_logging() -> None:
     if settings.metrics_enabled:
         setup_metrics(settings.metrics_port)
 
+
 _SHELL_METACHARACTERS: re.Pattern[str] = re.compile(r"[;&|$`><(){}\[\]!?*~\\]")
 
 
@@ -95,9 +96,7 @@ def _validate_workflow_path(path: Path) -> None:
     """
     raw = str(path)
     if _SHELL_METACHARACTERS.search(raw):
-        raise typer.BadParameter(
-            f"Workflow path contains disallowed shell metacharacters: {raw!r}"
-        )
+        raise typer.BadParameter(f"Workflow path contains disallowed shell metacharacters: {raw!r}")
     if not path.exists():
         raise typer.BadParameter(f"Workflow file not found: {raw!r}")
     if not path.is_file():
@@ -299,8 +298,7 @@ def run(
         else:
             console.print(
                 f"[bold red]Workflow {result.status}.[/bold red] "
-                f"id={result.workflow_id}"
-                + (f"  error={result.error}" if result.error else "")
+                f"id={result.workflow_id}" + (f"  error={result.error}" if result.error else "")
             )
             raise typer.Exit(1)
 
@@ -319,7 +317,12 @@ def plan(
 
 @app.command()
 def validate(
-    workflow_path: Annotated[Path, typer.Argument(help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)")],
+    workflow_path: Annotated[
+        Path,
+        typer.Argument(
+            help=f"Path to workflow YAML file (default search dir: {settings.workflows_dir}, override with WORKFLOWS_DIR env var)"
+        ),
+    ],
 ) -> None:
     """Validate a workflow YAML file against the Telemachy schema."""
     _validate_workflow_path(workflow_path)
@@ -337,6 +340,7 @@ def status(
         FileStateStore,
         WorkflowNotFoundError,
     )
+
     store = FileStateStore(settings.state_dir)
     try:
         state = store.load(workflow_id)
@@ -361,6 +365,7 @@ def status(
 def list_workflows() -> None:
     """List all workflows recorded in the state directory."""
     from telemachy.state_store import FileStateStore
+
     store = FileStateStore(settings.state_dir)
     states = store.list()
     if not states:
@@ -384,6 +389,7 @@ def cancel(
         FileStateStore,
         WorkflowNotFoundError,
     )
+
     store = FileStateStore(settings.state_dir)
     try:
         state = store.request_cancel(workflow_id)
@@ -395,8 +401,7 @@ def cancel(
         raise typer.Exit(1) from None
     if state.status in {"completed", "failed", "cancelled"}:
         console.print(
-            f"[yellow]Workflow {workflow_id} already {state.status} — "
-            "nothing to cancel.[/yellow]"
+            f"[yellow]Workflow {workflow_id} already {state.status} — nothing to cancel.[/yellow]"
         )
         return
     console.print(
@@ -409,15 +414,57 @@ def cancel(
 def schema(
     output: Path = typer.Option(  # noqa: B008
         Path("schemas/workflow-v1.json"),
-        "--output", "-o",
+        "--output",
+        "-o",
         help="Path to write the JSON Schema file",
     ),
 ) -> None:
     """Export the workflow YAML JSON Schema for editor validation."""
     from telemachy.schema import write_workflow_schema
+
     output.parent.mkdir(parents=True, exist_ok=True)
     write_workflow_schema(output)
     typer.echo(f"Schema written to {output}")
+
+
+@app.command(name="register-epic")
+def register_epic_cmd(
+    workflow_path: Annotated[Path, typer.Argument(help="Path to workflow YAML file")],
+    repo: Annotated[
+        str | None,
+        typer.Option("--repo", help="Target GitHub repo OWNER/NAME (default: current repo)"),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Plan only: create nothing, publish nothing")
+    ] = False,
+) -> None:
+    """Describe a workflow as a GitHub epic + child issues and publish the trigger.
+
+    Creates one child issue per task (label ``state:needs-plan``), an epic
+    issue with the parseable task-list body (label ``agamemnon-epic``), and
+    publishes ``hi.pipeline.epic.{key}.registered`` (Odysseus ADR-013 §6).
+    The final stdout line is a JSON result object — a machine contract for
+    callers (e.g. the Hephaestus research myrmidon).
+    """
+    import json as _json
+
+    from telemachy.github_epic import register_epic
+
+    _validate_workflow_path(workflow_path)
+    spec = _load_workflow(workflow_path)
+    try:
+        result = register_epic(spec, repo=repo, nats_url=settings.nats_url, dry_run=dry_run)
+    except Exception as exc:
+        err_console.print(f"[bold red]register-epic failed:[/bold red] {exc}")
+        raise typer.Exit(1) from exc
+    # Human-readable summary on stderr-adjacent rich console; JSON contract on
+    # plain stdout as the FINAL line.
+    if not dry_run:
+        console.print(
+            f"[bold green]Epic #{result['epic']} registered on {result['repo']}"
+            f"[/bold green] (key {result['key']}, {len(result['children'])} children)"
+        )
+    print(_json.dumps(result))
 
 
 def main() -> None:

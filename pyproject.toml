@@ -8,6 +8,7 @@ version = "0.1.0"
 requires-python = ">=3.10"
 
 [project.scripts]
+telemachy = "telemachy.cli:main"
 telemachy-mcp = "telemachy.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]

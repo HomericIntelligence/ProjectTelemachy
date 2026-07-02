@@ -60,6 +60,15 @@ See `docs/backwards-compat.md`.
 - pixi: expand `platforms` to `linux-64`, `osx-arm64`, `osx-64`, `win-64`
   so contributors and operators on macOS and Windows can run
   `pixi install` (#180).
+- Settings: `client_kwargs()` helper deduplicates `AgamemnonClient`
+  construction across CLI/executor call sites (#231).
+- Executor: tasks whose dependencies have failed are now skipped instead
+  of blocking forever (#13).
+- Executor: `_monitor_completion` bounded by `monitor_timeout_seconds`
+  and `monitor_max_polls` (#7).
+- Executor: teardown deletes teams in addition to agents (#5).
+- Client: agent name resolved to ID before setting `assigneeAgentId`
+  (#12).
 
 ### Changed (breaking)
 
@@ -72,18 +81,6 @@ See `docs/backwards-compat.md`.
   were non-functional stubs. A persistent workflow-state backend is
   required before they can be reintroduced; until then, query
   ProjectAgamemnon directly.
-
-### Changed
-
-- Settings: `client_kwargs()` helper deduplicates `AgamemnonClient`
-  construction across CLI/executor call sites (#231).
-- Executor: tasks whose dependencies have failed are now skipped instead
-  of blocking forever (#13).
-- Executor: `_monitor_completion` bounded by `monitor_timeout_seconds`
-  and `monitor_max_polls` (#7).
-- Executor: teardown deletes teams in addition to agents (#5).
-- Client: agent name resolved to ID before setting `assigneeAgentId`
-  (#12).
 
 ### Fixed
 

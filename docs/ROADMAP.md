@@ -5,6 +5,7 @@ It captures **what is shipping now, what is shipping next, and what we
 know is not yet built**. Every row links to an issue, an ADR, or both.
 
 Conventions:
+
 - Release lines follow `docs/backwards-compat.md` (SemVer; v0.x is pre-1.0).
 - Each row links to a tracking issue (or notes _no issue yet_) and to
   any relevant ADR under `docs/adr/`.

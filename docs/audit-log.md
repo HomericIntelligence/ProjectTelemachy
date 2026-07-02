@@ -2,14 +2,16 @@
 
 ## Overview
 
-ProjectTelemachy records all workflow execution events to a structured JSONL audit log when configured with `AUDIT_LOG_PATH`. The audit log serves as a tamper-evident record of:
+ProjectTelemachy records all workflow execution events to a structured JSONL audit log when configured with
+`AUDIT_LOG_PATH`. The audit log serves as a tamper-evident record of:
 
 - **Who** ran the workflow (hostname, user account)
 - **When** each event occurred (UTC ISO 8601 timestamp)
 - **What** happened (event type, workflow ID, resource IDs)
 - **Outcome** of tasks, teams, and the workflow itself
 
-The audit log uses SHA-256 hashing to form a continuity-aware hash chain, protecting against tampering and providing evidence of execution integrity across process restarts.
+The audit log uses SHA-256 hashing to form a continuity-aware hash chain, protecting against tampering and providing
+evidence of execution integrity across process restarts.
 
 ## Configuration
 
@@ -48,6 +50,7 @@ Each audit record is a JSON object with these mandatory fields:
 ### Workflow Events
 
 - **`workflow.started`** — Workflow execution begins
+
   ```json
   "payload": {
     "spec_name": "deploy-fleet",
@@ -58,6 +61,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`workflow.completed`** — Workflow finished successfully
+
   ```json
   "payload": {
     "spec_name": "deploy-fleet",
@@ -66,6 +70,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`workflow.cancelled`** — Workflow was cancelled via stop event
+
   ```json
   "payload": {
     "spec_name": "deploy-fleet"
@@ -73,6 +78,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`workflow.failed`** — Workflow encountered an error
+
   ```json
   "payload": {
     "spec_name": "deploy-fleet",
@@ -83,6 +89,7 @@ Each audit record is a JSON object with these mandatory fields:
 ### Agent Events
 
 - **`agent.created`** — Agent provisioned
+
   ```json
   "payload": {
     "agent_name": "worker-1",
@@ -93,6 +100,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`agent.deleted`** — Agent deleted during teardown
+
   ```json
   "payload": {
     "agent_name": "worker-1",
@@ -103,6 +111,7 @@ Each audit record is a JSON object with these mandatory fields:
 ### Team Events
 
 - **`team.created`** — Team provisioned
+
   ```json
   "payload": {
     "team_name": "backend-team",
@@ -112,6 +121,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`team.deleted`** — Team deleted during teardown
+
   ```json
   "payload": {
     "team_name": "backend-team",
@@ -122,6 +132,7 @@ Each audit record is a JSON object with these mandatory fields:
 ### Task Events
 
 - **`task.submitted`** — Task submitted to Agamemnon
+
   ```json
   "payload": {
     "team_id": "team-abc123",
@@ -133,6 +144,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`task.completed`** — Task finished successfully
+
   ```json
   "payload": {
     "workflow_id": "a1b2c3d4",
@@ -142,6 +154,7 @@ Each audit record is a JSON object with these mandatory fields:
   ```
 
 - **`task.failed`** — Task encountered an error
+
   ```json
   "payload": {
     "workflow_id": "a1b2c3d4",
@@ -152,7 +165,8 @@ Each audit record is a JSON object with these mandatory fields:
 
 ## Hash Chain Verification
 
-If `AUDIT_HASH_CHAIN=true` (the default), each record includes a SHA-256 hash of all its fields, with a `prev_hash` field linking to the previous record's hash. This forms an append-only chain that detects any tampering.
+If `AUDIT_HASH_CHAIN=true` (the default), each record includes a SHA-256 hash of all its fields, with a `prev_hash`
+field linking to the previous record's hash. This forms an append-only chain that detects any tampering.
 
 ### Verifying the chain
 
@@ -176,7 +190,8 @@ print(f"✓ Audit chain verified: {len(records)} records, no tampering detected"
 
 ### Chain Continuity Across Restarts
 
-On process restart, the audit sink reads the last JSON record from the existing log and seeds the hash chain from its `hash` field. This ensures that:
+On process restart, the audit sink reads the last JSON record from the existing log and seeds the hash chain from its
+`hash` field. This ensures that:
 
 1. The chain does not silently reset to the genesis hash
 2. Any corruption in the existing log (missing or malformed `hash` field) is detected as `AuditChainError` at startup
@@ -189,7 +204,8 @@ The `actor` object always includes:
 - `host_id` — Configured via `HOST_ID` env var (default: `"hermes"`)
 - `user` — Resolved from `USER` env var (POSIX), then `USERNAME` (Windows), then `"unknown"`
 
-On CI systems or sandboxes that strip both env vars, `actor.user` will be `"unknown"`. A single warning log is emitted when this occurs.
+On CI systems or sandboxes that strip both env vars, `actor.user` will be `"unknown"`. A single warning log is emitted
+when this occurs.
 
 ## Log Retention and Archival
 
@@ -200,7 +216,8 @@ The JSONL format streams cleanly into external logging systems:
 tail -f /var/log/telemachy/audit.jsonl | curl -X POST -d @- http://loki:3100/...
 ```
 
-Retention policies are typically set per downstream system. Archive the JSONL file after retention windows expire if long-term auditability is required.
+Retention policies are typically set per downstream system. Archive the JSONL file after retention windows expire if
+long-term auditability is required.
 
 ## Example: Reading the Audit Log
 

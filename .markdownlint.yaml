@@ -14,6 +14,11 @@ MD013:
 MD033:
   allowed_elements: [T, img, br, details, summary]
 
+# Duplicate section names under different parents (CHANGELOG 'Changed'
+# per release) are the Keep-a-Changelog convention.
+MD024:
+  siblings_only: true
+
 MD036: false
 MD040: false
 MD041: false
