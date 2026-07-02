@@ -94,7 +94,14 @@ jobs:
       - name: Run markdownlint-cli2
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd  # v20.0.0
         with:
-          globs: "**/*.md"
+          # markdownlint-cli2 does NOT read .markdownlintignore (that file
+          # only applies to markdownlint-cli v1) — exclusions must be
+          # negation globs here. Keep in sync with .markdownlintignore.
+          globs: |
+            **/*.md
+            !.claude-followup-*.md
+            !.claude-prompt-*.md
+            !.pixi/**
           config: ".markdownlint.yaml"
 
   pixi-check:
