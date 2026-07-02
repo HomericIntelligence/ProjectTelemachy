@@ -169,8 +169,9 @@ class TestCliCommand:
     """Tests for the register-epic CLI wiring."""
 
     def test_json_contract_on_stdout(self, workflow_file_factory: Any, monkeypatch: Any) -> None:
-        from typer.testing import CliRunner
         from unittest.mock import patch
+
+        from typer.testing import CliRunner
 
         from telemachy.cli import app
 
@@ -185,8 +186,9 @@ class TestCliCommand:
         assert json.loads(last_line) == canned
 
     def test_failure_exits_nonzero(self, workflow_file_factory: Any) -> None:
-        from typer.testing import CliRunner
         from unittest.mock import patch
+
+        from typer.testing import CliRunner
 
         from telemachy.cli import app
 
