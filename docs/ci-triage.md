@@ -22,7 +22,7 @@ When a CI job fails at "Set up job" or any pre-checkout step:
 ### 1. Pull the Logs
 
 ```bash
-gh run view <RUN-ID> --log-failed --repo HomericIntelligence/ProjectTelemachy
+gh run view <RUN-ID> --log-failed --repo HomericIntelligence/Telemachy
 ```
 
 Look for the specific error message. Common patterns:
@@ -42,8 +42,8 @@ at the time of the failure. Note the incident ID if one matches the failure time
 **If the run is recent (< 90 days old):**
 
 ```bash
-gh run rerun <RUN-ID> --failed --repo HomericIntelligence/ProjectTelemachy
-gh run watch <RUN-ID> --repo HomericIntelligence/ProjectTelemachy
+gh run rerun <RUN-ID> --failed --repo HomericIntelligence/Telemachy
+gh run watch <RUN-ID> --repo HomericIntelligence/Telemachy
 ```
 
 Wait for the re-run to complete. If it passes, the failure was transient.
@@ -53,7 +53,7 @@ Wait for the re-run to complete. If it passes, the failure was transient.
 Trigger a fresh `workflow_dispatch` run on the same commit SHA:
 
 ```bash
-gh workflow run ci.yml --ref <COMMIT-SHA> --repo HomericIntelligence/ProjectTelemachy
+gh workflow run ci.yml --ref <COMMIT-SHA> --repo HomericIntelligence/Telemachy
 ```
 
 Then observe the new run. If it passes, the failure was transient.
@@ -126,7 +126,7 @@ grep -oE '\$\{\{[[:space:]]*secrets\.[A-Z_]+[[:space:]]*\}\}' \
 Compare the referenced secret names against the configured secrets in the repo:
 
 ```bash
-gh secret list --repo HomericIntelligence/ProjectTelemachy --json name --jq '.[].name' | sort -u
+gh secret list --repo HomericIntelligence/Telemachy --json name --jq '.[].name' | sort -u
 ```
 
 **What to look for:**

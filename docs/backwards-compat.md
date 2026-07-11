@@ -1,7 +1,7 @@
 # Backwards Compatibility Policy
 
 This document defines what backwards compatibility means for
-ProjectTelemachy and how breaking changes are handled.
+Telemachy and how breaking changes are handled.
 
 ## Public surface area (governed by SemVer)
 

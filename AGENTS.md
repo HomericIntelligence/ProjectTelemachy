@@ -1,11 +1,11 @@
-# AGENTS.md — ProjectTelemachy
+# AGENTS.md — Telemachy
 
 This document specifies the multi-agent coordination protocols for
-ProjectTelemachy within the HomericIntelligence distributed agent mesh.
+Telemachy within the HomericIntelligence distributed agent mesh.
 
 ## Role
 
-ProjectTelemachy is the declarative workflow engine: it parses YAML
+Telemachy is the declarative workflow engine: it parses YAML
 workflows, provisions agents and teams via ProjectAgamemnon's REST API,
 assigns dependency-ordered tasks, monitors completion, and tears down
 resources.
@@ -28,7 +28,7 @@ off (see "Handoff" below).
 
 | Agent | Owns | Must not do |
 | --- | --- | --- |
-| ProjectTelemachy | workflow YAML interpretation, dependency ordering, teardown policy | spawn agents directly (always via Agamemnon) |
+| Telemachy | workflow YAML interpretation, dependency ordering, teardown policy | spawn agents directly (always via Agamemnon) |
 | ProjectAgamemnon | agent / team / task lifecycle, HMAS orchestration | parse workflow YAML |
 | ProjectNestor | research and ideation upstream | execute workflows |
 | ProjectArgus | observability, log aggregation | mutate state in Agamemnon |

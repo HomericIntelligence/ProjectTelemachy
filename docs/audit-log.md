@@ -2,7 +2,7 @@
 
 ## Overview
 
-ProjectTelemachy records all workflow execution events to a structured JSONL audit log when configured with
+Telemachy records all workflow execution events to a structured JSONL audit log when configured with
 `AUDIT_LOG_PATH`. The audit log serves as a tamper-evident record of:
 
 - **Who** ran the workflow (hostname, user account)
