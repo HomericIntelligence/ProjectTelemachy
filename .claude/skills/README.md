@@ -1,7 +1,7 @@
-# ProjectTelemachy Custom Skills
+# Telemachy Custom Skills
 
 This directory holds repository-specific Claude / Hephaestus skills for
-ProjectTelemachy-specific workflows. Skills are markdown documents that
+Telemachy-specific workflows. Skills are markdown documents that
 describe **how to perform a recurring task** in this repository; they
 complement the global Hephaestus skill library by capturing knowledge
 that is too narrow for ecosystem-wide reuse.

@@ -1,6 +1,6 @@
 # Dependency License Compatibility Audit
 
-ProjectTelemachy is distributed under the BSD 3-Clause License
+Telemachy is distributed under the BSD 3-Clause License
 (see `LICENSE`). This document records the formal license audit of
 runtime dependencies to confirm distribution compatibility.
 
@@ -46,7 +46,7 @@ compatible with redistribution under BSD-3-Clause.
   under #92, at which point this audit must be re-run and the row
   restored.
 - Apache-2.0 dependencies, when present, retain their attribution
-  requirements; any redistribution of ProjectTelemachy source or
+  requirements; any redistribution of Telemachy source or
   binaries must preserve the upstream `LICENSE` and `NOTICE` files
   for those dependencies. Standard pip-installed dependencies are
   not redistributed by us; they remain on PyPI under their own terms.

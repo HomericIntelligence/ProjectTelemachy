@@ -1,6 +1,6 @@
-# Releasing ProjectTelemachy
+# Releasing Telemachy
 
-This document describes the release process for ProjectTelemachy.
+This document describes the release process for Telemachy.
 Most steps are automated by `.github/workflows/release.yml`.
 
 ## Version sources of truth
@@ -20,7 +20,7 @@ second-layer check that the pushed tag agrees with both sources.
 
 ## Versioning policy
 
-ProjectTelemachy follows [Semantic Versioning 2.0.0](https://semver.org/).
+Telemachy follows [Semantic Versioning 2.0.0](https://semver.org/).
 The public surface area governed by SemVer is:
 
 - The **workflow YAML schema** (`apiVersion: telemachy/v1`, field names,
@@ -68,7 +68,7 @@ breaking changes in any `MINOR` bump; operators should pin a specific
 
 - Workflow: `.github/workflows/release.yml` (triggered on `v*.*.*` tag push).
 - PyPI binding: the `telemachy` project on PyPI must have a Trusted
-  Publisher configured for `HomericIntelligence/ProjectTelemachy`,
+  Publisher configured for `HomericIntelligence/Telemachy`,
   workflow file `release.yml`, environment `pypi`. Configure once at
   <https://pypi.org/manage/account/publishing/>. Until this is configured,
   the `pypi-publish` job will fail with an OIDC token-exchange error —

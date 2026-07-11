@@ -46,7 +46,7 @@ def test_roadmap_references_outstanding_work_items() -> None:
 def test_roadmap_uses_canonical_remote_url() -> None:
     # Guard against the fork-URL defect seen in the prior plan iteration.
     text = _read()
-    bad = re.findall(r"https://github\.com/(?!HomericIntelligence/ProjectTelemachy)[^/\s)]+/ProjectTelemachy", text)
+    bad = re.findall(r"https://github\.com/(?!HomericIntelligence/Telemachy)[^/\s)]+/Telemachy", text)
     assert not bad, f"docs/ROADMAP.md links to non-canonical repo URLs: {bad}"
 
 
