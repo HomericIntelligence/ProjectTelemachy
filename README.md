@@ -1,6 +1,6 @@
-# ProjectTelemachy
+# Telemachy
 
-[![CI](https://github.com/HomericIntelligence/ProjectTelemachy/actions/workflows/ci.yml/badge.svg)](https://github.com/HomericIntelligence/ProjectTelemachy/actions/workflows/ci.yml)
+[![CI](https://github.com/HomericIntelligence/Telemachy/actions/workflows/ci.yml/badge.svg)](https://github.com/HomericIntelligence/Telemachy/actions/workflows/ci.yml)
 
 A declarative workflow engine for [ProjectAgamemnon](https://github.com/HomericIntelligence/ProjectAgamemnon).
 Define multi-agent workflows in YAML — Telemachy handles provisioning, task orchestration, completion monitoring,
@@ -46,7 +46,7 @@ just validate workflows/example.yaml
 See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the canonical roadmap —
 current, next, and future releases plus known limitations. Outstanding
 work (NATS subscriber, state backend for `status`/`list`/`cancel`) is
-tracked under epic [#92](https://github.com/HomericIntelligence/ProjectTelemachy/issues/92).
+tracked under epic [#92](https://github.com/HomericIntelligence/Telemachy/issues/92).
 
 ## Workflow Schema
 

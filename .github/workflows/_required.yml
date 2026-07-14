@@ -92,7 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - name: Run markdownlint-cli2
-        uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd  # v20.0.0
+        uses: DavidAnson/markdownlint-cli2-action@8de2aa07cae85fd17c0b35642db70cf5495f1d25  # v20.0.0
         with:
           # markdownlint-cli2 does NOT read .markdownlintignore (that file
           # only applies to markdownlint-cli v1) — exclusions must be
@@ -332,7 +332,7 @@ jobs:
         run: pixi run python -m bandit -ll --ini .bandit -r src/telemachy -f json -o bandit.json
       - name: Upload Bandit JSON report
         if: always() && hashFiles('bandit.json') != ''
-        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bandit-report
           path: bandit.json
@@ -404,7 +404,7 @@ jobs:
           # shellcheck disable=SC1091
           . /tmp/telemachy-install-venv/bin/activate
           pip install --upgrade pip --quiet
-          # ProjectTelemachy is pixi-managed: runtime deps live in pixi.toml
+          # Telemachy is pixi-managed: runtime deps live in pixi.toml
           # [pypi-dependencies], not pyproject.toml [project.dependencies], so a
           # clean install must stage those runtime deps alongside the wheel to
           # reflect how the package is actually consumed. Derive them from

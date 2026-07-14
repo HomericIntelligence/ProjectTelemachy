@@ -1,7 +1,7 @@
 # Definition of Done
 
 This document captures what "done" means for a feature, bug-fix, or
-documentation change in ProjectTelemachy. It complements `CONTRIBUTING.md`.
+documentation change in Telemachy. It complements `CONTRIBUTING.md`.
 
 ## Done — feature
 

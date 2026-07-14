@@ -1,6 +1,6 @@
-# ProjectTelemachy Roadmap
+# Telemachy Roadmap
 
-This roadmap is the authoritative planning artefact for ProjectTelemachy.
+This roadmap is the authoritative planning artefact for Telemachy.
 It captures **what is shipping now, what is shipping next, and what we
 know is not yet built**. Every row links to an issue, an ADR, or both.
 
@@ -17,17 +17,17 @@ Conventions:
 | --- | --- | --- | --- |
 | HTTP-polling task monitoring | Shipped (default) | — | [ADR-001](adr/001-http-polling-monitoring.md) |
 | Agamemnon-exclusive backend | Shipped | — | [ADR-002](adr/002-decouple-from-maestro.md) |
-| Secure TLS default (`REQUIRE_TLS=true`) | Shipped | [#158](https://github.com/HomericIntelligence/ProjectTelemachy/issues/158) | — |
-| Release workflow (PyPI + GH Release) | Shipped | [#153](https://github.com/HomericIntelligence/ProjectTelemachy/issues/153) | — |
-| 75% coverage gate | Shipped | [#152](https://github.com/HomericIntelligence/ProjectTelemachy/issues/152) | — |
-| Strict-audit remediation epic | In progress | [#92](https://github.com/HomericIntelligence/ProjectTelemachy/issues/92) | — |
+| Secure TLS default (`REQUIRE_TLS=true`) | Shipped | [#158](https://github.com/HomericIntelligence/Telemachy/issues/158) | — |
+| Release workflow (PyPI + GH Release) | Shipped | [#153](https://github.com/HomericIntelligence/Telemachy/issues/153) | — |
+| 75% coverage gate | Shipped | [#152](https://github.com/HomericIntelligence/Telemachy/issues/152) | — |
+| Strict-audit remediation epic | In progress | [#92](https://github.com/HomericIntelligence/Telemachy/issues/92) | — |
 
 ## Next Release (v0.2.0)
 
 | Work | Status | Issue | ADR |
 | --- | --- | --- | --- |
-| NATS subscriber for task-lifecycle events (supersedes ADR-001) | Planned | [#92](https://github.com/HomericIntelligence/ProjectTelemachy/issues/92) | ADR-001 → to be superseded |
-| Roadmap & milestones (this artefact) | In progress | [#167](https://github.com/HomericIntelligence/ProjectTelemachy/issues/167) | [ADR-003](adr/003-roadmap-artifact.md) |
+| NATS subscriber for task-lifecycle events (supersedes ADR-001) | Planned | [#92](https://github.com/HomericIntelligence/Telemachy/issues/92) | ADR-001 → to be superseded |
+| Roadmap & milestones (this artefact) | In progress | [#167](https://github.com/HomericIntelligence/Telemachy/issues/167) | [ADR-003](adr/003-roadmap-artifact.md) |
 
 ## Future (v1.0.0 and beyond)
 

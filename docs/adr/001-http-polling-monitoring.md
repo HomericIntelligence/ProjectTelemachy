@@ -2,12 +2,12 @@
 
 - **Status:** Proposed
 - **Date:** 2026-05-16
-- **Deciders:** ProjectTelemachy maintainers
+- **Deciders:** Telemachy maintainers
 - **Context tags:** monitoring, NATS, executor
 
 ## Context
 
-ProjectTelemachy's `WorkflowExecutor` needs to detect when assigned tasks
+Telemachy's `WorkflowExecutor` needs to detect when assigned tasks
 complete, so it can release dependent tasks and ultimately tear the
 workflow down per the declared teardown policy.
 
@@ -28,7 +28,7 @@ chose HTTP polling.
 
 ## Decision
 
-ProjectTelemachy monitors task completion by polling
+Telemachy monitors task completion by polling
 ProjectAgamemnon's REST API at the interval defined by
 `MONITOR_TIMEOUT_SECONDS` / `MONITOR_MAX_POLLS`. The NATS-based monitor
 path remains aspirational and is tracked by repository issues; this ADR

@@ -1,4 +1,4 @@
-"""Typer CLI for ProjectTelemachy."""
+"""Typer CLI for Telemachy."""
 
 from __future__ import annotations
 
