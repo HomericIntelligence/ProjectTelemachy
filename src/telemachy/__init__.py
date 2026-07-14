@@ -1,4 +1,4 @@
-"""ProjectTelemachy — declarative workflow engine for ProjectAgamemnon."""
+"""Telemachy — declarative workflow engine for ProjectAgamemnon."""
 
 from telemachy.agamemnon_client import AgamemnonClient, AgamemnonError
 from telemachy.config import Settings

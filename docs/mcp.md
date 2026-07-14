@@ -1,6 +1,6 @@
 # MCP (Model Context Protocol) Server
 
-The ProjectTelemachy MCP server (`telemachy-mcp`) provides read-only access to live Agamemnon state during development.
+The Telemachy MCP server (`telemachy-mcp`) provides read-only access to live Agamemnon state during development.
 It allows AI agents working in this repository to query agents and tasks without requiring direct HTTP access to the
 Agamemnon API.
 
@@ -22,7 +22,7 @@ No configuration is required beyond the environment variables listed below.
 
 ## Environment Variables
 
-The MCP server reuses the following environment variables from ProjectTelemachy's standard configuration:
+The MCP server reuses the following environment variables from Telemachy's standard configuration:
 
 - `AGAMEMNON_URL` (default: `http://localhost:8080`) — Agamemnon base URL
 - `AGAMEMNON_API_KEY` (optional) — Agamemnon API key (if auth is enabled)
@@ -74,6 +74,6 @@ The following are explicitly deferred or out-of-scope:
 
 ## Implementation
 
-See [issue #173](https://github.com/ProjectTelemachy/telemachy/issues/173) for full details. The implementation uses a
+See [issue #173](https://github.com/Telemachy/telemachy/issues/173) for full details. The implementation uses a
 plan-owned `Dispatcher` seam in `src/telemachy/mcp_server.py` to keep tests isolated from the MCP SDK's private
 internals.

@@ -1,8 +1,8 @@
-# ProjectTelemachy — CLAUDE.md
+# Telemachy — CLAUDE.md
 
 ## Project Overview
 
-ProjectTelemachy is a declarative workflow engine that automates multi-agent workflows by calling the
+Telemachy is a declarative workflow engine that automates multi-agent workflows by calling the
 ProjectAgamemnon REST API. Users define workflows in YAML; Telemachy parses them, provisions agents and
 teams via Agamemnon, assigns tasks with dependency ordering, monitors execution by polling
 Agamemnon's REST API (NATS-based event monitoring is planned but not yet wired up), and
@@ -107,7 +107,7 @@ teardown: on_completion | on_failure | never
 ## Repository Structure
 
 ```
-ProjectTelemachy/
+Telemachy/
 ├── src/
 │   └── telemachy/
 │       ├── __init__.py           # version

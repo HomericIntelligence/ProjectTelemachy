@@ -2,12 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-05-16
-- **Deciders:** ProjectTelemachy maintainers
+- **Deciders:** Telemachy maintainers
 - **Context tags:** orchestration, Agamemnon, maestro
 
 ## Context
 
-ProjectTelemachy originally supported two backends:
+Telemachy originally supported two backends:
 
 1. ai-maestro — the previous orchestrator in the HomericIntelligence
    ecosystem (see Odysseus `docs/adr/006-decouple-from-ai-maestro.md`).
@@ -20,7 +20,7 @@ ai-maestro has been removed from the mesh.
 
 ## Decision
 
-ProjectTelemachy targets **ProjectAgamemnon exclusively** as its execution
+Telemachy targets **ProjectAgamemnon exclusively** as its execution
 backend. The `maestro_client.py` module is retained only as a thin
 deprecation stub and will be removed in a future major release.
 

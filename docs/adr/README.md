@@ -1,7 +1,7 @@
 # Architecture Decision Records
 
 This directory holds Architecture Decision Records (ADRs) for
-ProjectTelemachy. ADRs are append-only documents capturing **why** a
+Telemachy. ADRs are append-only documents capturing **why** a
 significant architectural choice was made.
 
 ## Convention

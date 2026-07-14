@@ -20,7 +20,7 @@ See `docs/backwards-compat.md`.
   Trusted Publishing. Closes #153, #176; part of #92.
 - `docs/ROADMAP.md`, ADR-003, and `v0.1.0`/`v0.2.0`/`v1.0.0` GitHub
   milestones establishing the canonical planning artefact for
-  ProjectTelemachy. Regression-tested by `tests/test_roadmap.py`.
+  Telemachy. Regression-tested by `tests/test_roadmap.py`.
   Closes #167; part of #92.
 - WorkflowExecutor: declarative YAML-driven multi-agent orchestration with
   dependency-respecting task assignment, HTTP polling for completion, and

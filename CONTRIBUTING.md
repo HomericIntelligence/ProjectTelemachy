@@ -1,6 +1,6 @@
-# Contributing to ProjectTelemachy
+# Contributing to Telemachy
 
-Thank you for your interest in contributing to ProjectTelemachy! This is the workflow
+Thank you for your interest in contributing to Telemachy! This is the workflow
 execution engine for the [HomericIntelligence](https://github.com/HomericIntelligence)
 distributed agent mesh — it runs, plans, monitors, and cancels named workflow YAML files
 against Agamemnon's REST API. (A NATS-based event channel is planned — see issue #92 — but is not yet wired up.)
@@ -38,8 +38,8 @@ sending a PR that alters planned scope.
 
 ```bash
 # Clone the repository
-git clone https://github.com/HomericIntelligence/ProjectTelemachy.git
-cd ProjectTelemachy
+git clone https://github.com/HomericIntelligence/Telemachy.git
+cd Telemachy
 
 # Activate the Pixi environment
 pixi shell
@@ -83,7 +83,7 @@ work (#92) and is not currently used by the engine.
 
 Before starting work:
 
-- Browse [existing issues](https://github.com/HomericIntelligence/ProjectTelemachy/issues)
+- Browse [existing issues](https://github.com/HomericIntelligence/Telemachy/issues)
 - Comment on an issue to claim it before starting work
 - Create a new issue if one doesn't exist for your contribution
 
@@ -280,4 +280,4 @@ Please review our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
 
 ---
 
-Thank you for contributing to ProjectTelemachy!
+Thank you for contributing to Telemachy!

@@ -110,7 +110,7 @@ When you report a vulnerability:
 
 ## Security Best Practices
 
-When contributing to ProjectTelemachy:
+When contributing to Telemachy:
 
 - Validate workflow YAML schemas before execution
 - Sanitize workflow parameters and step inputs
