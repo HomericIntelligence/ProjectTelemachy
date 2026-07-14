@@ -25,7 +25,7 @@ class AgamemnonClientKwargs(TypedDict):
 
 
 class Settings(BaseSettings):
-    """Application settings for ProjectTelemachy."""
+    """Application settings for Telemachy."""
 
     model_config = SettingsConfigDict(
         env_file=".env",

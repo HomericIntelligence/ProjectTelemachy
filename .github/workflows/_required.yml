@@ -404,7 +404,7 @@ jobs:
           # shellcheck disable=SC1091
           . /tmp/telemachy-install-venv/bin/activate
           pip install --upgrade pip --quiet
-          # ProjectTelemachy is pixi-managed: runtime deps live in pixi.toml
+          # Telemachy is pixi-managed: runtime deps live in pixi.toml
           # [pypi-dependencies], not pyproject.toml [project.dependencies], so a
           # clean install must stage those runtime deps alongside the wheel to
           # reflect how the package is actually consumed. Derive them from

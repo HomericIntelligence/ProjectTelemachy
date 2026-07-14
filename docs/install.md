@@ -1,6 +1,6 @@
-# Installing and Upgrading ProjectTelemachy
+# Installing and Upgrading Telemachy
 
-ProjectTelemachy is a Python package distributed primarily for the
+Telemachy is a Python package distributed primarily for the
 HomericIntelligence ecosystem. This document explains how to install it
 outside the pinned `pixi` development environment.
 
@@ -9,8 +9,8 @@ outside the pinned `pixi` development environment.
 ### 1. `pixi` (development; recommended)
 
 ```bash
-git clone https://github.com/HomericIntelligence/ProjectTelemachy.git
-cd ProjectTelemachy
+git clone https://github.com/HomericIntelligence/Telemachy.git
+cd Telemachy
 pixi install
 pixi run just test
 ```
@@ -34,7 +34,7 @@ declared in `pyproject.toml`; CI does not run this path.
 ### 3. `pip install` from a release tag (operator)
 
 ```bash
-pip install "git+https://github.com/HomericIntelligence/ProjectTelemachy@vX.Y.Z"
+pip install "git+https://github.com/HomericIntelligence/Telemachy@vX.Y.Z"
 ```
 
 This installs the `telemachy` CLI and library into the active Python
@@ -48,7 +48,7 @@ Add to your `pyproject.toml`:
 ```toml
 [project]
 dependencies = [
-    "telemachy @ git+https://github.com/HomericIntelligence/ProjectTelemachy@vX.Y.Z",
+    "telemachy @ git+https://github.com/HomericIntelligence/Telemachy@vX.Y.Z",
 ]
 ```
 
@@ -75,7 +75,7 @@ pip uninstall telemachy            # if installed via pip
 rm -rf <repo-checkout>/.pixi
 ```
 
-No persistent data is stored by ProjectTelemachy itself — workflow state
+No persistent data is stored by Telemachy itself — workflow state
 lives in ProjectAgamemnon.
 
 ## Troubleshooting

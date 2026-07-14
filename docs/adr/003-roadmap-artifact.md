@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-06-03
-- **Deciders:** ProjectTelemachy maintainers
+- **Deciders:** Telemachy maintainers
 - **Context tags:** planning, governance, docs
 
 ## Context
