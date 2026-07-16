@@ -36,6 +36,9 @@ documentation change in Telemachy. It complements `CONTRIBUTING.md`.
 - [ ] Workflow runs successfully on the PR.
 - [ ] Required check list in branch protection updated if a job was
       renamed/added.
+- [ ] Required-check workflow changes pass `tests/test_merge_queue.py` and
+      preserve the staged activation contract in
+      [`docs/ci/merge-queue.md`](ci/merge-queue.md).
 - [ ] Time and resource impact noted in the PR description.
 
 ## Not done

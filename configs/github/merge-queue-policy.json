@@ -1,0 +1,30 @@
+{
+  "repository": "HomericIntelligence/Telemachy",
+  "target_branch": "main",
+  "required_contexts": [
+    "build",
+    "deps/version-sync",
+    "install",
+    "integration-tests",
+    "lint",
+    "package",
+    "release",
+    "schema-validation",
+    "security/dependency-scan",
+    "security/secrets-scan",
+    "test",
+    "unit-tests"
+  ],
+  "merge_queue_rule": {
+    "type": "merge_queue",
+    "parameters": {
+      "check_response_timeout_minutes": 60,
+      "grouping_strategy": "ALLGREEN",
+      "max_entries_to_build": 10,
+      "max_entries_to_merge": 5,
+      "merge_method": "SQUASH",
+      "min_entries_to_merge": 1,
+      "min_entries_to_merge_wait_minutes": 5
+    }
+  }
+}
