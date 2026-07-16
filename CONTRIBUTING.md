@@ -207,6 +207,15 @@ gh pr create --title "[Type] Brief description" --body "Closes #<issue-number>"
 - PR title should be clear and descriptive
 - Tests and linting must pass
 
+### Merge queue rollout
+
+Telemachy's required checks support GitHub merge groups, but queue activation
+is a separate, staged operator action. See
+[`docs/ci/merge-queue.md`](docs/ci/merge-queue.md) for the approved queue
+policy, activation gate, smoke check, and rollback procedure. Until activation
+is recorded in issue #308, contributors must not assume that enabling
+auto-merge has placed a pull request in the queue.
+
 ### Changelog discipline
 
 Any PR that changes user-visible behavior — CLI flags, workflow YAML
