@@ -1,8 +1,11 @@
 # Merge queue rollout
 
 Telemachy's `main` branch is prepared for a staged GitHub merge-queue rollout.
-The queue must not be activated until the readiness pull request has merged,
-strict review has passed, and a representative smoke-check pull request is ready.
+An independent human must review the workflow changes before the readiness pull
+request may merge; following this runbook does not satisfy that review gate. The
+queue must not be activated until the readiness pull request has merged, strict
+review findings are resolved, and a representative smoke-check pull request is
+ready.
 
 The repository-level `homeric-main-baseline` ruleset remains the source of truth
 for branch protection. Activation must append one `merge_queue` rule to that
@@ -93,45 +96,147 @@ gh api "repos/${REPO}/rulesets/${RULESET_ID}" \
       == [$policy[0].merge_queue_rule]
     '
 
-gh pr merge --auto --squash <SMOKE-PR> --repo "${REPO}"
-RUN_ID="$(gh run list --repo "${REPO}" --workflow _required.yml \
-  --event merge_group --limit 1 --json databaseId,event \
-  --jq 'map(select(.event == "merge_group"))[0].databaseId')"
-test -n "${RUN_ID}"
+SMOKE_PR=123  # Replace with the designated smoke pull request number.
+OWNER="${REPO%%/*}"
+NAME="${REPO#*/}"
+REQUESTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+PR_HEAD_SHA="$(gh pr view "${SMOKE_PR}" --repo "${REPO}" \
+  --json headRefOid --jq '.headRefOid')"
+test -n "${PR_HEAD_SHA}"
+printf 'smoke_pr=%s requested_at=%s pr_head_sha=%s\n' \
+  "${SMOKE_PR}" "${REQUESTED_AT}" "${PR_HEAD_SHA}"
 
-gh api "repos/${REPO}/actions/runs/${RUN_ID}" \
-  --jq '{id,event,head_sha,status,conclusion,html_url}'
+gh pr merge --auto --squash "${SMOKE_PR}" --repo "${REPO}"
+
+# Poll the designated PR until GitHub records its actual queue entry. The entry
+# provides both the authoritative enqueue time and that entry's queue head SHA.
+QUEUE_ENTRY=""
+for attempt in {1..60}; do
+  QUEUE_ENTRY="$(gh api graphql \
+    -f owner="${OWNER}" -f name="${NAME}" -F number="${SMOKE_PR}" \
+    -f query='
+      query($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) {
+          pullRequest(number: $number) {
+            mergeQueueEntry {
+              enqueuedAt
+              headCommit { oid }
+            }
+          }
+        }
+      }
+    ' --jq '
+      .data.repository.pullRequest.mergeQueueEntry
+      | select(. != null and .headCommit != null)
+      | {enqueuedAt, queueHeadSha: .headCommit.oid}
+    ')"
+  [[ -n "${QUEUE_ENTRY}" ]] && break
+  sleep 10
+done
+test -n "${QUEUE_ENTRY}"
+
+ENQUEUED_AT="$(jq -r '.enqueuedAt' <<<"${QUEUE_ENTRY}")"
+QUEUE_HEAD_SHA="$(jq -r '.queueHeadSha' <<<"${QUEUE_ENTRY}")"
+CURRENT_PR_HEAD_SHA="$(gh pr view "${SMOKE_PR}" --repo "${REPO}" \
+  --json headRefOid --jq '.headRefOid')"
+[[ "${CURRENT_PR_HEAD_SHA}" == "${PR_HEAD_SHA}" ]]
+printf 'smoke_pr=%s enqueued_at=%s pr_head_sha=%s queue_head_sha=%s\n' \
+  "${SMOKE_PR}" "${ENQUEUED_AT}" "${PR_HEAD_SHA}" "${QUEUE_HEAD_SHA}"
+
+# Select only a newly-created merge_group run for this exact queue head. Do not
+# use the repository's latest merge-group run: it may belong to a different PR.
+RUN_JSON=""
+for attempt in {1..60}; do
+  RUN_JSON="$(gh api --method GET \
+    "repos/${REPO}/actions/workflows/_required.yml/runs" \
+    -f event=merge_group \
+    -f head_sha="${QUEUE_HEAD_SHA}" \
+    -f created=">=${ENQUEUED_AT}" \
+    -f per_page=100 \
+    | jq -c --arg queue_head_sha "${QUEUE_HEAD_SHA}" \
+      --arg enqueued_at "${ENQUEUED_AT}" '
+        [.workflow_runs[]
+         | select(
+             .event == "merge_group"
+             and .head_sha == $queue_head_sha
+             and .created_at >= $enqueued_at
+           )]
+        | sort_by(.created_at)
+        | first // empty
+      ')"
+  [[ -n "${RUN_JSON}" ]] && break
+  sleep 10
+done
+test -n "${RUN_JSON}"
+
+RUN_ID="$(jq -r '.id' <<<"${RUN_JSON}")"
+gh run watch "${RUN_ID}" --repo "${REPO}" --exit-status
+
+RUN_JSON="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}")"
+jq -e --arg queue_head_sha "${QUEUE_HEAD_SHA}" \
+  --arg enqueued_at "${ENQUEUED_AT}" '
+    .event == "merge_group"
+    and .head_sha == $queue_head_sha
+    and .created_at >= $enqueued_at
+    and .status == "completed"
+    and .conclusion == "success"
+  ' <<<"${RUN_JSON}"
+jq '{id,event,head_sha,created_at,status,conclusion,html_url}' \
+  <<<"${RUN_JSON}"
 
 EXPECTED="$(jq -c '.required_contexts | sort' "${POLICY}")"
-EMITTED="$(gh api --paginate \
-  "repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
-  | jq -s -c --argjson expected "${EXPECTED}" '
-      [.[].jobs[]
-       | select(.name as $name | $expected | index($name))
-       | .name]
-      | sort
-    ')"
-
-if [[ "${EMITTED}" != "${EXPECTED}" ]]; then
-  diff -u \
-    <(jq -r '.[]' <<<"${EXPECTED}") \
-    <(jq -r '.[]' <<<"${EMITTED}")
-  exit 1
-fi
+JOBS_JSON="$(mktemp)"
+CHECK_RUNS_JSON="$(mktemp)"
+trap 'rm -f "${JOBS_JSON}" "${CHECK_RUNS_JSON}"' EXIT
 
 gh api --paginate \
   "repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
-  | jq -s -e --argjson expected "${EXPECTED}" '
-      [.[].jobs[]
-       | select(.name as $name | $expected | index($name))
-       | select(.status != "completed" or .conclusion != "success")]
-      | length == 0
-    '
+  --jq '.jobs[]' | jq -s '.' > "${JOBS_JSON}"
+
+JOB_NAMES="$(jq -c --argjson expected "${EXPECTED}" '
+  [.[]
+   | select(.name as $name | $expected | index($name))
+   | .name]
+  | sort
+' "${JOBS_JSON}")"
+[[ "${JOB_NAMES}" == "${EXPECTED}" ]]
+
+jq -e --argjson expected "${EXPECTED}" \
+  --arg queue_head_sha "${QUEUE_HEAD_SHA}" '
+    [.[] | select(.name as $name | $expected | index($name))]
+    | all(.[];
+        .head_sha == $queue_head_sha
+        and .status == "completed"
+        and .conclusion == "success"
+      )
+  ' "${JOBS_JSON}"
+
+while IFS= read -r check_run_url; do
+  gh api "repos/${REPO}/check-runs/${check_run_url##*/}"
+done < <(jq -r --argjson expected "${EXPECTED}" '
+  .[]
+  | select(.name as $name | $expected | index($name))
+  | .check_run_url
+' "${JOBS_JSON}") | jq -s '.' > "${CHECK_RUNS_JSON}"
+
+CHECK_RUN_NAMES="$(jq -c '[.[].name] | sort' "${CHECK_RUNS_JSON}")"
+[[ "${CHECK_RUN_NAMES}" == "${EXPECTED}" ]]
+
+jq -e --arg queue_head_sha "${QUEUE_HEAD_SHA}" '
+  all(.[];
+    .head_sha == $queue_head_sha
+    and .status == "completed"
+    and .conclusion == "success"
+  )
+' "${CHECK_RUNS_JSON}"
 ```
 
-The job query intentionally compares the emitted required check-run names from
-that merge-group run with the 12-context artifact. Additional advisory jobs may
-run, but every policy context must appear exactly once and finish successfully.
+The selected run is tied to the designated smoke pull request through its merge
+queue entry, actual enqueue time, and exact queue head SHA. The job query then
+follows that run's `check_run_url` values. Both the required job names and their
+check-run names must equal the 12-context artifact exactly, without missing or
+duplicate required contexts, and every required job and check run must finish
+successfully. Additional advisory jobs may run but are not policy contexts.
 
 Do not remove or rename any required context during activation. The queue rule
 does not carry a separate check list; it relies on the existing

@@ -11,6 +11,7 @@ WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 REQUIRED_WORKFLOW = WORKFLOWS_DIR / "_required.yml"
 RELEASE_WORKFLOW = WORKFLOWS_DIR / "release.yml"
 MERGE_QUEUE_POLICY = REPO_ROOT / "configs" / "github" / "merge-queue-policy.json"
+MERGE_QUEUE_RUNBOOK = REPO_ROOT / "docs" / "ci" / "merge-queue.md"
 
 EXPECTED_REQUIRED_CONTEXTS = [
     "build",
@@ -60,6 +61,18 @@ def _load_policy() -> dict[str, Any]:
     return policy
 
 
+def _job(workflow: dict[str, Any], job_id: str) -> dict[str, Any]:
+    job = workflow["jobs"][job_id]
+    assert isinstance(job, dict), f"workflow job {job_id!r} must be a mapping"
+    return job
+
+
+def _step(job: dict[str, Any], name: str) -> dict[str, Any]:
+    step = next(item for item in job["steps"] if item.get("name") == name)
+    assert isinstance(step, dict), f"workflow step {name!r} must be a mapping"
+    return step
+
+
 def test_policy_artifact_pins_exact_required_contexts() -> None:
     assert _load_policy()["required_contexts"] == EXPECTED_REQUIRED_CONTEXTS
 
@@ -94,6 +107,64 @@ def test_required_workflow_emits_every_policy_context_exactly_once() -> None:
 
     assert sorted(emitted_policy_contexts) == policy_contexts
     assert len(emitted_policy_contexts) == len(set(emitted_policy_contexts))
+
+
+def test_required_gitleaks_scan_fails_on_detected_secrets() -> None:
+    workflow = _load_workflow(REQUIRED_WORKFLOW)
+    scan = _step(_job(workflow, "security-secrets-scan"), "Run Gitleaks")["run"]
+
+    assert "--report-format sarif" in scan
+    assert "--report-path gitleaks.sarif" in scan
+    assert "--exit-code 0" not in scan
+
+
+def test_required_gitleaks_sarif_upload_runs_after_scan_failure() -> None:
+    workflow = _load_workflow(REQUIRED_WORKFLOW)
+    upload = _step(_job(workflow, "security-secrets-scan"), "Upload Gitleaks SARIF")
+
+    assert upload["if"] == "always() && hashFiles('gitleaks.sarif') != ''"
+
+
+def test_smoke_runbook_correlates_new_run_to_smoke_pr_queue_head() -> None:
+    runbook = MERGE_QUEUE_RUNBOOK.read_text()
+
+    for marker in (
+        "SMOKE_PR=",
+        "PR_HEAD_SHA=",
+        "ENQUEUED_AT=",
+        "QUEUE_HEAD_SHA=",
+        "event=merge_group",
+        'head_sha="${QUEUE_HEAD_SHA}"',
+        'created=">=${ENQUEUED_AT}"',
+    ):
+        assert marker in runbook
+    assert "--limit 1" not in runbook
+
+
+def test_smoke_runbook_verifies_selected_run_terminal_result() -> None:
+    runbook = MERGE_QUEUE_RUNBOOK.read_text()
+
+    for assertion in (
+        '.event == "merge_group"',
+        ".head_sha == $queue_head_sha",
+        '.status == "completed"',
+        '.conclusion == "success"',
+    ):
+        assert assertion in runbook
+
+
+def test_smoke_runbook_compares_exact_job_and_check_run_names_to_policy() -> None:
+    runbook = MERGE_QUEUE_RUNBOOK.read_text()
+
+    assert 'EXPECTED="$(jq -c \'.required_contexts | sort\' "${POLICY}")"' in runbook
+    assert "actions/runs/${RUN_ID}/jobs?per_page=100" in runbook
+    assert ".check_run_url" in runbook
+    assert 'CHECK_RUN_NAMES="' in runbook
+    assert '[[ "${JOB_NAMES}" == "${EXPECTED}" ]]' in runbook
+    assert '[[ "${CHECK_RUN_NAMES}" == "${EXPECTED}" ]]' in runbook
+    assert "all(.;" not in runbook
+    assert runbook.count("all(.[];") == 2
+    assert "repos/${REPO}/check-runs/${check_run_url##*/}" in runbook
 
 
 def test_release_publisher_remains_tag_only() -> None:
