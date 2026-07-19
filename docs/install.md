@@ -83,7 +83,7 @@ lives in ProjectAgamemnon.
 - **`No module named telemachy`** — confirm the active environment
   matches the installation mode above.
 - **CLI commands hang** — confirm `AGAMEMNON_URL` is reachable; see the
-  env vars table in `CLAUDE.md`.
+  env vars table in `AGENTS.md`.
 - **`Workflow schema validation failed`** — run `just validate` to get
   the structured error, and consult `docs/backwards-compat.md` if the
   workflow worked on a previous version.

@@ -8,7 +8,7 @@ documentation change in Telemachy. It complements `CONTRIBUTING.md`.
 - [ ] Pydantic models / workflow schema updated (if applicable).
 - [ ] `pytest` covers each new conditional branch (positive + negative).
 - [ ] `just lint` and `just format-check` clean.
-- [ ] Public API change documented in `README.md` and `CLAUDE.md`.
+- [ ] Public API change documented in `README.md` and `AGENTS.md`.
 - [ ] If workflow YAML schema changes: bump `apiVersion` per
       `docs/backwards-compat.md` and update workflow examples.
 - [ ] `CHANGELOG.md` `Unreleased` entry added (one bullet, user-facing language).

@@ -52,7 +52,7 @@ def test_require_tls_env_true() -> None:
 
 
 class TestDefaults:
-    """Every field defaults to the value documented in CLAUDE.md."""
+    """Every field defaults to the value documented in AGENTS.md."""
 
     def test_agamemnon_url_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("AGAMEMNON_URL", raising=False)

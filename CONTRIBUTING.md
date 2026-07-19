@@ -175,7 +175,7 @@ just validate <WORKFLOW>
 ```
 
 > `status`, `list`, and `cancel` are not yet implemented — see the
-> "Planned Features" section in [CLAUDE.md](./CLAUDE.md).
+> "Planned Features" section in [AGENTS.md](./AGENTS.md).
 
 ### Python Conventions
 
