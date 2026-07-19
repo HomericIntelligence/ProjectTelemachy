@@ -17,7 +17,7 @@ The following surfaces follow [Semantic Versioning 2.0.0](https://semver.org/):
    for `run`, `plan`, `status`, `validate`, `list`, `cancel`.
 3. **Python public API** — names exported from `telemachy/__init__.py` and
    `telemachy.executor`, `telemachy.models`, `telemachy.config`.
-4. **Environment variables** — names and defaults documented in `CLAUDE.md`.
+4. **Environment variables** — names and defaults documented in `AGENTS.md`.
 
 ## Not public
 

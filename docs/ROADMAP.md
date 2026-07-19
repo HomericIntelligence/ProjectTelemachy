@@ -40,7 +40,7 @@ Conventions:
 
 - `status`, `list`, and `cancel` CLI commands are not implemented; they
   require the state backend listed in Future. Until then, query
-  ProjectAgamemnon directly. (`CLAUDE.md` §Planned Features, `README.md`.)
+  ProjectAgamemnon directly. (`AGENTS.md` §Planned Features, `README.md`.)
 - Task-completion detection is HTTP polling, bounded by
   `MONITOR_TIMEOUT_SECONDS` / `MONITOR_MAX_POLLS`. Event-driven
   detection is gated on the NATS subscriber above.

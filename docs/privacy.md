@@ -75,4 +75,4 @@ own counsel.
 
 - `docs/adr/004-pii-handling-stance.md`
 - `SECURITY.md`
-- `CLAUDE.md` § Agent Guardrails
+- `AGENTS.md` § Agent Guardrails
