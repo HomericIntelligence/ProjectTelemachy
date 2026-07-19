@@ -1,0 +1,45 @@
+name: Merge Queue Smoke
+
+on:
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mq-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merge-queue-smoke:
+    name: merge-queue-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Validate GitHub Actions workflow YAML against JSON schema
+        # Same gate class as the required schema-validation job, but using the
+        # vendored schema bundled with check-jsonschema so the merge gate has
+        # no schemastore.org network dependency.
+        run: |
+          set -euo pipefail
+          pip install check-jsonschema PyYAML pytest --quiet
+          find .github/workflows -name "*.yml" -print0 | \
+            xargs -0 check-jsonschema --builtin-schema vendor.github-workflows
+
+      - name: Lint YAML
+        run: |
+          set -euo pipefail
+          pip install yamllint --quiet
+          yamllint -c .yamllint.yaml .
+
+      - name: Merge-queue readiness regression tests
+        # --noconftest: run the self-contained workflow-contract suite without
+        # loading tests/conftest.py, which imports the full telemachy package
+        # (pixi-managed runtime deps the smoke gate does not install).
+        run: python3 -m pytest --noconftest -p no:cacheprovider tests/test_merge_queue.py -q
+
+      - name: Run symlink check
+        run: bash scripts/check-symlinks.sh

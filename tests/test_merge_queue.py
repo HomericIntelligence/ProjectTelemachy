@@ -10,6 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 REQUIRED_WORKFLOW = WORKFLOWS_DIR / "_required.yml"
 RELEASE_WORKFLOW = WORKFLOWS_DIR / "release.yml"
+SMOKE_WORKFLOW = WORKFLOWS_DIR / "merge-queue-smoke.yml"
 MERGE_QUEUE_POLICY = REPO_ROOT / "configs" / "github" / "merge-queue-policy.json"
 MERGE_QUEUE_RUNBOOK = REPO_ROOT / "docs" / "ci" / "merge-queue.md"
 
@@ -91,9 +92,21 @@ def test_required_workflow_pull_request_main_block_is_exact() -> None:
     assert on_block["pull_request"] == {"branches": ["main"]}
 
 
-def test_required_workflow_merge_group_block_is_exact() -> None:
+def test_required_workflow_no_longer_runs_on_merge_group() -> None:
     on_block = _on_block(_load_workflow(REQUIRED_WORKFLOW))
-    assert on_block["merge_group"] == {"types": ["checks_requested"]}
+    assert "merge_group" not in on_block
+
+
+def test_smoke_workflow_handles_merge_group_checks_requested_only() -> None:
+    on_block = _on_block(_load_workflow(SMOKE_WORKFLOW))
+    assert on_block == {"merge_group": {"types": ["checks_requested"]}}
+
+
+def test_smoke_workflow_runs_exactly_one_fast_smoke_job() -> None:
+    jobs = _load_workflow(SMOKE_WORKFLOW)["jobs"]
+    assert list(jobs) == ["merge-queue-smoke"]
+    assert jobs["merge-queue-smoke"]["name"] == "merge-queue-smoke"
+    assert jobs["merge-queue-smoke"]["timeout-minutes"] == 5
 
 
 def test_required_workflow_emits_every_policy_context_exactly_once() -> None:
