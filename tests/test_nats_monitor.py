@@ -106,6 +106,7 @@ class TestNatsMonitorBasics:
         await asyncio.wait_for(wait_done.wait(), timeout=1.0)
 
         task.cancel()
+        # Re-await the cancelled task so its cancellation cleanup runs.
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
