@@ -9,6 +9,7 @@ import pytest
 from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
+import telemachy.telemetry as telemetry_mod
 from telemachy.telemetry import (
     WORKFLOWS_STARTED,
     JsonFormatter,
@@ -172,10 +173,9 @@ def test_json_formatter_safe_without_filter() -> None:
 @pytest.fixture(autouse=True)
 def reset_metrics_state() -> None:
     """Reset metrics state between tests."""
-    import telemachy.telemetry
 
-    telemachy.telemetry._metrics_started = False
-    telemachy.telemetry._tracing_started = False
+    telemetry_mod._metrics_started = False
+    telemetry_mod._tracing_started = False
 
 
 def test_setup_metrics_idempotent() -> None:

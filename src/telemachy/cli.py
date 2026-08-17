@@ -289,8 +289,11 @@ def run(
                     result = await executor.execute(spec, workflow_id=workflow_id)
                 finally:
                     watcher.cancel()
-                    with contextlib.suppress(asyncio.CancelledError):
-                        await watcher
+                    # Re-await the cancelled watcher so it can run its
+                    # cancellation cleanup (raised CancelledError is expected).
+                    if watcher is not None:
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await watcher
                     store.clear_cancel(workflow_id)
 
         if result.status == "completed":
