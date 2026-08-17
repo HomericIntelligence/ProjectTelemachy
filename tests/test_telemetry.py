@@ -10,12 +10,12 @@ from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 
 from telemachy.telemetry import (
-    _started_metrics_ports,
-    _started_tracing_services,
     WORKFLOWS_STARTED,
     JsonFormatter,
     SafePlainFormatter,
     WorkflowContextLogFilter,
+    _started_metrics_ports,
+    _started_tracing_services,
     get_tracer,
     setup_metrics,
     setup_tracing,
