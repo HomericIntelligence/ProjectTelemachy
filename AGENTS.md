@@ -355,7 +355,6 @@ The architecture above follows design principles inherited from
 - **Least privilege (POLA).** S3 and NATS credentials are scoped to the minimal
   bucket/stream permissions each workflow step requires.
 
-
 ## See also
 
 - `CONTRIBUTING.md` — contribution workflow.
