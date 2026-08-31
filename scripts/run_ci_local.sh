@@ -162,7 +162,7 @@ run_security-secrets-scan() {
 
 run_security-dependency-scan() {
     # pip-audit
-    run_in_container "pixi install --locked --quiet && pixi run python -m pip_audit 2>/dev/null || pixi run pip-audit 2>/dev/null || true"
+    run_in_container "pixi install --locked --quiet && pixi run pip-audit"
 }
 
 run_deps-version-sync() {

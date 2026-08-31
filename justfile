@@ -106,6 +106,10 @@ ci-schema-validation:
 ci-security-secrets-scan:
     ./scripts/run_ci_local.sh security-secrets-scan
 
+# Run CI dependency-audit checks in container
+ci-security-dependency-scan:
+    ./scripts/run_ci_local.sh security-dependency-scan
+
 # Run CI deps-version-sync checks in container
 ci-deps-version-sync:
     ./scripts/run_ci_local.sh deps-version-sync
